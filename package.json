@@ -9,7 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "pruebas": "node pruebas.mjs",
-    "verificar": "npm run build && node pruebas.mjs"
+    "verificar": "npm run build && node pruebas-guion.mjs && node pruebas.mjs",
+    "guion": "node pruebas-guion.mjs"
   },
   "dependencies": {
     "gsap": "3.12.5",
