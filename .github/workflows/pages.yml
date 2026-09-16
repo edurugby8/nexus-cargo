@@ -25,12 +25,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Requiere que Pages esté activado una vez a mano:
+      #   Settings → Pages → Source: GitHub Actions
+      # `enablement: true` no sirve aquí: el token del flujo no tiene el
+      # permiso de administración que hace falta, y falla con un error menos
+      # claro que el que da al no encontrar el sitio.
       - uses: actions/configure-pages@v5
-        # Intenta activar Pages desde el propio flujo. Si el token del flujo no
-        # tiene permiso de administración, falla aquí y hay que darle una vez
-        # al interruptor en Settings → Pages → Source: GitHub Actions.
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

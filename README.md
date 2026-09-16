@@ -32,8 +32,13 @@ npm run verificar  # compila + guion + recorrido funcional completo
 ### Publicar
 
 Al empujar a `main`, el flujo de `.github/workflows/pages.yml` compila y
-publica en GitHub Pages. Requiere tener *Settings → Pages → Source: GitHub
-Actions* activado una vez.
+publica en GitHub Pages.
+
+**Hace falta un clic una sola vez:** *Settings → Pages → Source → GitHub
+Actions*. Hasta que se dé, el flujo falla en `configure-pages` con «Get Pages
+site failed», que es exactamente lo que significa. El token del flujo no puede
+activarlo por su cuenta: `enablement: true` se probó y falla por falta de
+permiso de administración.
 
 ---
 
