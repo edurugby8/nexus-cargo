@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="cielo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a1828"/><stop offset=".62" stop-color="#1d3d55"/>
+      <stop offset=".72" stop-color="#8a6a4e"/><stop offset="1" stop-color="#0b1a26"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#cielo)"/>
+  <g opacity=".5" fill="#0a1622">
+    <path d="M120 300h14v150h-14zM300 260h14v190h-14zM480 280h14v170h-14z"/>
+    <path d="M100 296h420v12H100zM126 300l-20 60h34zM306 260l-20 60h34z"/>
+  </g>
+  <rect y="452" width="1200" height="178" fill="#0a1a28"/>
+  <rect x="740" y="330" width="330" height="80" rx="3" fill="#e2701f"/>
+  <g fill="#0d1f31" opacity=".4">
+    <rect x="760" y="330" width="7" height="80"/><rect x="790" y="330" width="7" height="80"/>
+    <rect x="820" y="330" width="7" height="80"/><rect x="850" y="330" width="7" height="80"/>
+    <rect x="880" y="330" width="7" height="80"/><rect x="910" y="330" width="7" height="80"/>
+    <rect x="940" y="330" width="7" height="80"/><rect x="970" y="330" width="7" height="80"/>
+    <rect x="1000" y="330" width="7" height="80"/><rect x="1030" y="330" width="7" height="80"/>
+  </g>
+  <text x="80" y="150" font-family="Inter Tight, system-ui, sans-serif" font-size="78" font-weight="200" fill="#eef3f8" letter-spacing="14">NEXUS<tspan font-weight="700" fill="#e2701f">CARGO</tspan></text>
+  <text x="80" y="205" font-family="Inter Tight, system-ui, sans-serif" font-size="27" font-weight="300" fill="#9dabbb">Movemos el mundo sin que el mundo se detenga.</text>
+  <text x="80" y="560" font-family="Inter Tight, system-ui, sans-serif" font-size="20" font-weight="500" fill="#5ccfe0" letter-spacing="7">NXCU 482019 · EL VIAJE COMPLETO DE UN CONTENEDOR</text>
+  <text x="80" y="596" font-family="Inter Tight, system-ui, sans-serif" font-size="16" fill="#6a7a8d">Marca ficticia · Demostración de diseño de CodeCraft</text>
+</svg>

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NEXUS CARGO · El viaje completo de un contenedor</title>
+<meta name="description" content="De Shanghái a Zaragoza en una sola toma: buque, grúa, aduanas, carretera y entrega. Experiencia 3D del recorrido íntegro del contenedor NXCU 482019. Demostración de diseño de CodeCraft.">
+<meta name="theme-color" content="#0a1622">
+<meta name="color-scheme" content="dark">
+<link rel="canonical" href="https://edurugby8.github.io/nexus-cargo/">
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="NEXUS CARGO">
+<meta property="og:title" content="NEXUS CARGO · El viaje completo de un contenedor">
+<meta property="og:description" content="De Shanghái a Zaragoza en una sola toma: buque, grúa, aduanas, carretera y entrega. Marca ficticia, demostración de diseño de CodeCraft.">
+<meta property="og:url" content="https://edurugby8.github.io/nexus-cargo/">
+<meta property="og:image" content="https://edurugby8.github.io/nexus-cargo/og.svg">
+<meta property="og:locale" content="es_ES">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="NEXUS CARGO · El viaje completo de un contenedor">
+<meta name="twitter:description" content="Buque, grúa, aduanas, carretera y entrega en una sola toma WebGL.">
+<meta name="twitter:image" content="https://edurugby8.github.io/nexus-cargo/og.svg">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "NEXUS CARGO",
+  "url": "https://edurugby8.github.io/nexus-cargo/",
+  "description": "Demostración de diseño web 3D sobre el recorrido completo de un contenedor de transporte internacional. NEXUS CARGO es una marca ficticia creada por CodeCraft.",
+  "inLanguage": "es",
+  "creator": { "@type": "Organization", "name": "CodeCraft" },
+  "about": { "@type": "Thing", "name": "Logística internacional de contenedores" }
+}
+</script>
+</head>
+<body>
+
+<a class="saltar" href="#relato">Saltar al contenido</a>
+
+<!-- Capítulo 0 · Carga. Se retira cuando la escena ha pintado su primer
+     fotograma, no cuando lo dice un temporizador. -->
+<div class="carga" id="carga" role="status" aria-live="polite">
+  <div class="carga__centro">
+    <p class="carga__marca"><span>NEXUS</span><b>CARGO</b></p>
+    <p class="carga__codigo" id="carga-codigo">NXCU 482019</p>
+    <div class="carga__ruta" aria-hidden="true">
+      <i class="carga__linea"><u id="carga-avance"></u></i>
+      <span class="carga__hito" data-hito="0">Shanghái</span>
+      <span class="carga__hito" data-hito="1">Valencia</span>
+      <span class="carga__hito" data-hito="2">Zaragoza</span>
+    </div>
+    <p class="carga__nota">Preparando la ruta<span class="carga__pct" id="carga-pct">0 %</span></p>
+  </div>
+</div>
+
+<!-- Un solo lienzo WebGL detrás de todo el documento. No captura eventos. -->
+<div class="lienzo" id="lienzo" aria-hidden="true"></div>
+<div class="vineta" aria-hidden="true"></div>
+
+<!-- Alternativa sin WebGL: el contenido completo se lee igual -->
+<div class="sin-webgl" id="sin-webgl" hidden aria-hidden="true"></div>
+
+<p class="sr" id="descripcion-escena">
+  Animación tridimensional del recorrido de un contenedor de carga desde un
+  buque portacontenedores hasta su entrega por carretera. Toda la información
+  del recorrido está también en el texto de esta página; la animación es
+  decorativa y puede detenerse con el control de movimiento.
+</p>
+
+<div class="avance" id="avance" aria-hidden="true"></div>
+
+<header class="nav" id="nav">
+  <a class="nav__marca" href="#oceano">
+    <span class="nav__icono" aria-hidden="true"></span>
+    <span class="nav__nombre">NEXUS<b>CARGO</b></span>
+  </a>
+  <nav class="nav__capitulos" aria-label="Capítulos del recorrido">
+    <ol id="nav-capitulos"></ol>
+  </nav>
+  <a class="boton boton--fino nav__cta" href="#solicitud">Solicitar transporte</a>
+</header>
+
+<div class="controles">
+  <button type="button" class="control" id="control-sonido" aria-pressed="false">
+    <span class="control__icono control__icono--sonido" aria-hidden="true"></span>
+    <span class="control__texto">Activar sonido</span>
+  </button>
+  <button type="button" class="control" id="control-movimiento" aria-pressed="false">
+    <span class="control__icono" aria-hidden="true"><i></i><i></i></span>
+    <span class="control__texto">Pausar movimiento</span>
+  </button>
+</div>
+
+<!-- Panel de seguimiento: los datos del envío, integrados en la escena -->
+<aside class="hud" id="hud" aria-label="Seguimiento del envío">
+  <p class="hud__codigo"><span>Envío</span><b>NXCU 482019</b></p>
+  <dl class="hud__datos" id="hud-datos"></dl>
+  <p class="hud__estado" id="hud-estado" data-estado="transito">En tránsito</p>
+</aside>
+
+<main class="relato" id="relato">
+
+  <!-- 01 · El mundo conectado -->
+  <section class="cap" id="oceano" data-cap="oceano">
+    <div class="cap__caja">
+      <p class="etiqueta" data-revela><span>01 · Alta mar</span><em>Transporte marítimo</em></p>
+      <h1 class="titulo" data-revela>
+        <span class="linea"><span class="linea__int">NEXUS</span></span>
+        <span class="linea"><span class="linea__int">CARGO</span></span>
+      </h1>
+      <p class="lema" data-revela data-retardo="1">Movemos el mundo sin que el mundo se detenga.</p>
+      <p class="entradilla" data-aparece data-retardo="2">
+        Un contenedor sale de Shanghái y cruza medio planeta. Esta es la
+        historia de su viaje completo, de la bodega del buque hasta la puerta
+        del cliente, sin un solo cambio de responsable.
+      </p>
+      <div class="acciones" data-aparece data-retardo="3">
+        <a class="boton boton--solido" href="#puerto"><span class="punto" aria-hidden="true"></span>Seguir el envío</a>
+        <a class="boton" href="#servicios">Ver servicios</a>
+      </div>
+      <ul class="cifras" data-aparece data-retardo="4">
+        <li><span class="cifras__n">9 214</span><span class="cifras__p">millas náuticas</span></li>
+        <li><span class="cifras__n">15</span><span class="cifras__p">días de travesía</span></li>
+        <li><span class="cifras__n">1</span><span class="cifras__p">responsable</span></li>
+      </ul>
+    </div>
+    <p class="desliza" data-aparece data-retardo="5"><i aria-hidden="true"></i>Desplázate para seguir el envío</p>
+  </section>
+
+  <!-- 02 · Llegada al puerto -->
+  <section class="cap" id="puerto" data-cap="puerto">
+    <div class="cap__caja">
+      <p class="etiqueta" data-revela><span>02 · Llegada a puerto</span><em>Gestión portuaria</em></p>
+      <h2 class="titular" data-revela>
+        <span class="linea"><span class="linea__int">Quince días</span></span>
+        <span class="linea"><span class="linea__int">de mar.</span></span>
+      </h2>
+      <p class="entradilla" data-aparece>
+        El NX ORION entra en la dársena con 9 400 contenedores a bordo. Dos
+        remolcadores lo empujan contra el muelle mientras el práctico corrige
+        los últimos metros. Atracar un buque de 294 metros es cuestión de
+        centímetros, y de que la ventana de atraque estuviera reservada desde
+        que zarpó.
+      </p>
+      <dl class="ficha" data-aparece data-retardo="1">
+        <div><dt>Buque</dt><dd>NX ORION · IMO 9482019</dd></div>
+        <div><dt>Eslora</dt><dd>294 m · 9 400 TEU</dd></div>
+        <div><dt>Atraque</dt><dd>Muelle 7 · Valencia</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 03 · La grúa -->
+  <section class="cap" id="grua" data-cap="grua">
+    <div class="cap__caja">
+      <p class="etiqueta" data-revela><span>03 · Descarga</span><em>Operativa de terminal</em></p>
+      <h2 class="titular" data-revela>
+        <span class="linea"><span class="linea__int">Treinta toneladas</span></span>
+        <span class="linea"><span class="linea__int">con precisión</span></span>
+        <span class="linea"><span class="linea__int">de milímetro.</span></span>
+      </h2>
+      <p class="entradilla" data-aparece>
+        La grúa pórtico localiza el NXCU 482019 en la bahía 24. El spreader
+        baja, encaja los cuatro giros de cierre y tensa los cables antes de
+        despegar la carga. A partir de ahí manda el peso: se mueve con su
+        propia inercia y lo difícil no es levantarlo, es pararlo donde toca.
+      </p>
+      <dl class="ficha" data-aparece data-retardo="1">
+        <div><dt>Contenedor</dt><dd>NXCU 482019 · 40′ HC</dd></div>
+        <div><dt>Peso bruto</dt><dd>24 180 kg</dd></div>
+        <div><dt>Descarga</dt><dd>17 SEP · 07:28</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 04 · Aduanas -->
+  <section class="cap" id="aduanas" data-cap="aduanas">
+    <div class="cap__caja">
+      <p class="etiqueta" data-revela><span>04 · Aduanas</span><em>Despacho aduanero</em></p>
+      <h2 class="titular" data-revela>
+        <span class="linea"><span class="linea__int">Todo lo que</span></span>
+        <span class="linea"><span class="linea__int">entra, se</span></span>
+        <span class="linea"><span class="linea__int">comprueba.</span></span>
+      </h2>
+      <p class="entradilla" data-aparece>
+        Escáner de rayos X, lectura del código, verificación documental y
+        control del precinto. Cuatro minutos y cincuenta segundos. La barrera
+        no se abre hasta que las cuatro coinciden, y si una no cuadra el
+        contenedor se aparta antes de salir del recinto.
+      </p>
+      <ul class="comprobaciones" data-aparece data-retardo="1">
+        <li data-estado="ok">Documentación verificada</li>
+        <li data-estado="ok">Precinto NX-7741208 intacto</li>
+        <li data-estado="ok">Temperatura 4,2 °C estable</li>
+        <li data-estado="ok">Autorización concedida</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 05 · Salida del puerto -->
+  <section class="cap" id="salida" data-cap="salida">
+    <div class="cap__caja">
+      <p class="etiqueta" data-revela><span>05 · Salida del recinto</span><em>Transporte terrestre</em></p>
+      <h2 class="titular" data-revela>
+        <span class="linea"><span class="linea__int">Del muelle</span></span>
+        <span class="linea"><span class="linea__int">a la carretera.</span></span>
+      </h2>
+      <p class="entradilla" data-aparece>
+        El tractor arranca con veinticuatro toneladas detrás. La barrera sube,
+        el puerto queda atrás y empiezan trescientos dieciocho kilómetros con
+        el mismo número de seguimiento que traía desde Shanghái.
+      </p>
+    </div>
+  </section>
+
+  <!-- 06 · Transporte por carretera -->
+  <section class="cap" id="carretera" data-cap="carretera">
+    <div class="cap__caja">
+      <p class="etiqueta" data-revela><span>06 · En ruta</span><em>Seguimiento en tiempo real</em></p>
+      <h2 class="titular" data-revela>
+        <span class="linea"><span class="linea__int">318 kilómetros</span></span>
+        <span class="linea"><span class="linea__int">bajo control.</span></span>
+      </h2>
+      <p class="entradilla" data-aparece>
+        Posición, temperatura, apertura de puertas y tiempo estimado, cada
+        treinta segundos. Si algo se sale de rango salta antes de que sea un
+        problema: esa es la diferencia entre transportar y responder.
+      </p>
+      <dl class="ficha ficha--ancha" data-aparece data-retardo="1">
+        <div><dt>Ubicación</dt><dd>A-3 · km 214</dd></div>
+        <div><dt>Restantes</dt><dd>318 km</dd></div>
+        <div><dt>Estimada</dt><dd>19:40</dd></div>
+        <div><dt>Temperatura</dt><dd data-estado="ok">4,2 °C</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 07 · Centro logístico -->
+  <section class="cap" id="centro" data-cap="centro">
+    <div class="cap__caja">
+      <p class="etiqueta" data-revela><span>07 · Centro logístico</span><em>Almacenamiento y distribución</em></p>
+      <h2 class="titular" data-revela>
+        <span class="linea"><span class="linea__int">Ochenta mil</span></span>
+        <span class="linea"><span class="linea__int">metros</span></span>
+        <span class="linea"><span class="linea__int">coordinados.</span></span>
+      </h2>
+      <p class="entradilla" data-aparece>
+        Lectura de matrícula en la entrada, muelle asignado antes de que el
+        camión pare, inventario actualizado en el momento de la descarga. La
+        carga entra, se clasifica y sale preparada para el último tramo sin
+        que nadie tenga que buscar nada.
+      </p>
+      <dl class="ficha" data-aparece data-retardo="1">
+        <div><dt>Matrícula</dt><dd>4821 NXC</dd></div>
+        <div><dt>Muelle</dt><dd>D-14 asignado</dd></div>
+        <div><dt>Inventario</dt><dd data-estado="ok">Actualizado</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <!-- 08 · Entrega final -->
+  <section class="cap cap--final" id="entrega" data-cap="entrega">
+    <div class="cap__caja cap__caja--centro">
+      <p class="etiqueta" data-revela><span>08 · Entrega</span><em>Última milla</em></p>
+      <h2 class="titular titular--grande" data-revela>
+        <span class="linea"><span class="linea__int">De puerto</span></span>
+        <span class="linea"><span class="linea__int">a puerta.</span></span>
+      </h2>
+      <p class="lema" data-revela data-retardo="1">Una sola cadena. Un solo seguimiento.</p>
+      <p class="entradilla entradilla--centro" data-aparece data-retardo="2">
+        Diecinueve horas y cuarenta minutos después del atraque, el NXCU 482019
+        llega a su destino. Un único responsable desde la bodega del buque
+        hasta la firma de entrega.
+      </p>
+      <ol class="ruta" data-aparece data-retardo="3" id="ruta-resumen"></ol>
+      <div class="acciones acciones--centro" data-aparece data-retardo="4">
+        <a class="boton boton--solido" href="#solicitud"><span class="punto" aria-hidden="true"></span>Solicitar transporte</a>
+        <a class="boton" href="#solicitud">Seguir un envío</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Servicios: repartidos por el recorrido, recogidos aquí -->
+  <section class="servicios" id="servicios" aria-labelledby="servicios-titulo">
+    <div class="interior">
+      <p class="etiqueta" data-revela><span>La cadena completa</span></p>
+      <h2 class="titular titular--medio" id="servicios-titulo" data-revela>
+        <span class="linea"><span class="linea__int">Todo lo que pasa</span></span>
+        <span class="linea"><span class="linea__int">entre el origen y la puerta.</span></span>
+      </h2>
+      <ul class="servicios__lista" id="servicios-lista"></ul>
+    </div>
+  </section>
+
+  <!-- Solicitud: demostración, no envía nada -->
+  <section class="solicitud" id="solicitud" aria-labelledby="solicitud-titulo">
+    <div class="interior interior--estrecho">
+      <p class="etiqueta" data-revela><span>Demostración</span></p>
+      <h2 class="titular titular--medio" id="solicitud-titulo" data-revela>
+        <span class="linea"><span class="linea__int">Cuéntanos qué mueves.</span></span>
+      </h2>
+      <p class="entradilla" data-aparece>
+        Este formulario es parte de la demostración: <strong>no envía datos a
+        ningún servicio</strong> y nada de lo que escribas sale de tu navegador.
+      </p>
+      <form class="form" id="form-solicitud" novalidate>
+        <div class="form__fila">
+          <label class="campo">
+            <span class="campo__et">Origen</span>
+            <input class="campo__in" type="text" name="origen" autocomplete="off" placeholder="Shanghái, CN">
+          </label>
+          <label class="campo">
+            <span class="campo__et">Destino</span>
+            <input class="campo__in" type="text" name="destino" autocomplete="off" placeholder="Zaragoza, ES">
+          </label>
+        </div>
+        <div class="form__fila">
+          <label class="campo">
+            <span class="campo__et">Tipo de carga</span>
+            <select class="campo__in" name="tipo">
+              <option>Contenedor completo (FCL)</option>
+              <option>Grupaje (LCL)</option>
+              <option>Temperatura controlada</option>
+              <option>Carga proyecto</option>
+            </select>
+          </label>
+          <label class="campo">
+            <span class="campo__et">Volumen mensual</span>
+            <select class="campo__in" name="volumen">
+              <option>1 – 5 contenedores</option>
+              <option>6 – 20 contenedores</option>
+              <option>Más de 20</option>
+            </select>
+          </label>
+        </div>
+        <label class="campo">
+          <span class="campo__et">Correo de contacto</span>
+          <input class="campo__in" type="email" name="correo" autocomplete="off" placeholder="nombre@empresa.com">
+        </label>
+        <div class="form__pie">
+          <button class="boton boton--solido" type="submit"><span class="punto" aria-hidden="true"></span>Enviar solicitud</button>
+          <p class="form__aviso" id="form-aviso" role="status" aria-live="polite">Demostración: no se envía nada.</p>
+        </div>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="pie">
+  <div class="interior pie__interior">
+    <div>
+      <p class="pie__marca">NEXUS<b>CARGO</b></p>
+      <p class="nota pie__aviso">
+        <strong>NEXUS CARGO no existe.</strong> Es una marca ficticia creada
+        para esta demostración de diseño de <strong>CodeCraft</strong>. El
+        puerto, el buque, la grúa, el camión y todos los datos del envío están
+        generados por código en tu propio navegador: no hay ni un modelo ni una
+        fotografía descargados. Tampoco hay tienda, seguimiento ni
+        integraciones, y el formulario no envía nada a ningún sitio.
+      </p>
+    </div>
+    <div class="pie__col">
+      <p class="nota">
+        Tipografía: Inter Tight (SIL OFL 1.1).<br>
+        three.js (MIT) · GSAP (licencia estándar de GreenSock).<br>
+        Geometría, texturas y sonido: originales de esta pieza.
+      </p>
+      <p class="nota">© <span id="anio">2026</span> · Pieza de demostración</p>
+    </div>
+  </div>
+</footer>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

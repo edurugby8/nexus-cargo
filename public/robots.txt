@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://edurugby8.github.io/nexus-cargo/sitemap.xml

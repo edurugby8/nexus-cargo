@@ -1,0 +1,392 @@
+/**
+ * La escena.
+ *
+ * Un solo lienzo WebGL detrás de todo el documento, un solo bucle y una sola
+ * fuente de verdad: el progreso del desplazamiento. Este archivo no decide
+ * NADA de la historia —eso está en `ruta.js`—; se limita a construir el mundo
+ * y a pintar, en cada fotograma, lo que el guion dice que toca.
+ *
+ * La organización viene de `three-d-stage.js` (starter-components, CC0): la
+ * escena posee el renderizador, las luces, la cámara y el redimensionado, y
+ * los objetos se montan sobre ella. De `animations-v3.jsx`, la regla de que
+ * nada se mueve en crudo: la cámara sigue una curva calculada y luego se
+ * AMORTIGUA, que es lo que hace que el recorrido se sienta conducido.
+ */
+
+import * as THREE from 'three';
+import { clamp, damp, lerp, medirEquipo } from '../lib/util.js';
+import { AJUSTES } from '../ajustes.js';
+import {
+  poseEn, mundoEn, MEDIDAS, TRAMOS, ALTURAS, capituloEn, inicioDe,
+} from './ruta.js';
+import { fijarResolucion } from './texturas.js';
+import { crearMar, crearCielo } from './mar.js';
+import { crearContenedor } from './contenedor.js';
+import { crearBarco } from './barco.js';
+import { crearGrua } from './grua.js';
+import { crearCamion } from './camion.js';
+import { crearPuerto, crearAduanas, crearCarretera, crearCentro, crearDestino } from './tierra.js';
+import { crearAmbiental } from './ambiental.js';
+
+export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar }) {
+  fijarResolucion(caps.textura);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: caps.antialias, alpha: false, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, caps.dpr));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1;
+  if (caps.sombras) {
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  }
+  contenedor.appendChild(renderer.domElement);
+
+  const escena = new THREE.Scene();
+  const niebla = new THREE.FogExp2(0xb9b0a2, 0.0012);
+  escena.fog = niebla;
+
+  const camara = new THREE.PerspectiveCamera(46, 1, 0.5, caps.lejos);
+  escena.add(camara);
+
+  /* ── Luces ────────────────────────────────────────────────────────
+     Tres, y cada una con su trabajo. El sol proyecta sombra y es el único que
+     lo hace: dos fuentes con sombra en una escena exterior se contradicen y se
+     nota enseguida. El hemisférico impide que las caras en sombra sean negro
+     plano. El relleno frío viene del lado opuesto y recorta las siluetas. */
+  const sol = new THREE.DirectionalLight(0xffe0b0, 1.6);
+  sol.position.set(-160, 120, 180);
+  /* El objetivo de la luz va SIEMPRE en la escena y SIEMPRE se mueve con la
+     cámara. Estaba condicionado a que hubiera sombras, y sin ellas se quedaba
+     en el origen del mundo: con la cámara a mil seiscientos metros de allí, la
+     luz llegaba rasante y el buque salía como una plancha negra. Un
+     `DirectionalLight` no ilumina desde su posición, ilumina en la DIRECCIÓN
+     que va de su posición a su objetivo; olvidar el segundo es olvidar la
+     mitad. */
+  escena.add(sol.target);
+  if (caps.sombras) {
+    sol.castShadow = true;
+    sol.shadow.mapSize.set(2048, 2048);
+    const c = sol.shadow.camera;
+    c.left = -90; c.right = 90; c.top = 90; c.bottom = -90;
+    c.near = 1; c.far = 520;
+    c.updateProjectionMatrix();
+    sol.shadow.bias = -0.0009;
+    sol.shadow.normalBias = 0.6;
+  }
+  escena.add(sol);
+
+  /* El hemisférico va alto a propósito. Sobre el mar, y más al amanecer, la
+     luz rebotada del cielo y del agua es enorme: la cara en sombra de un casco
+     nunca es negra. Con el valor bajo, el buque salía como una plancha negra
+     recortada y perdía toda la forma que tiene el casco. */
+  const cielo = new THREE.HemisphereLight(0x9ab6d0, 0x46505c, 1.5);
+  escena.add(cielo);
+
+  const relleno = new THREE.DirectionalLight(0xbcd2e8, 0.35);
+  relleno.position.set(140, 60, -120);
+  escena.add(relleno);
+
+  /* ── El mundo ─────────────────────────────────────────────────── */
+  const mar = crearMar({ caps });
+  // El domo, con holgura respecto al plano lejano de la cámara
+  const domoCielo = crearCielo(caps.lejos * 0.82);
+  escena.add(mar, domoCielo);
+
+  const barco = crearBarco({ caps });
+  escena.add(barco);
+
+  const gruas = [];
+  for (const x of [-190, -105, MEDIDAS.gruaX, 120, 215]) {
+    const g = crearGrua({ x, activa: x === MEDIDAS.gruaX, caps });
+    gruas.push(g);
+    escena.add(g);
+  }
+
+  const puerto = crearPuerto({ caps });
+  const aduanas = crearAduanas();
+  const carretera = crearCarretera({ caps });
+  const centro = crearCentro({ caps });
+  const destino = crearDestino();
+  escena.add(puerto, aduanas, carretera, centro, destino);
+
+  const camion = crearCamion({ caps });
+  escena.add(camion);
+
+  // El contenedor protagonista: el único con código legible y puertas
+  const heroe = crearContenedor({ protagonista: true, detalle: true });
+  escena.add(heroe);
+
+  const ambiental = crearAmbiental({ caps });
+  escena.add(ambiental);
+
+  /* ── Regiones ─────────────────────────────────────────────────────
+     Un mundo de kilómetro y medio no se paga entero en cada fotograma. Cada
+     región declara en qué tramo del recorrido puede verse, con holgura por los
+     dos lados para que nada aparezca de golpe delante del objetivo. */
+  const regiones = [
+    { obj: barco, desde: -1, hasta: inicioDe('aduanas') + 0.1 },
+    { obj: mar, desde: -1, hasta: inicioDe('carretera') },
+    { obj: puerto, desde: -1, hasta: inicioDe('carretera') },
+    { obj: aduanas, desde: inicioDe('grua') - 0.06, hasta: inicioDe('carretera') + 0.05 },
+    { obj: carretera, desde: inicioDe('aduanas') - 0.04, hasta: 1.1 },
+    { obj: centro, desde: inicioDe('carretera') - 0.02, hasta: 1.1 },
+    { obj: destino, desde: inicioDe('centro') - 0.02, hasta: 1.1 },
+  ];
+  for (const g of gruas) {
+    regiones.push({ obj: g, desde: -1, hasta: inicioDe('salida') + 0.06 });
+  }
+
+  /* ── Estado del bucle ─────────────────────────────────────────── */
+  const st = {
+    progreso: 0, objetivo: 0,
+    punteroX: 0, punteroY: 0, suaveX: 0, suaveY: 0,
+    entrada: reducido ? 1 : 0,
+  };
+  const pose = { pos: [0, 0, 0], mira: [0, 0, 0], fov: 46 };
+  const posSuave = new THREE.Vector3(0, 60, 400);
+  const miraSuave = new THREE.Vector3(0, 20, 0);
+  const objetivoPos = new THREE.Vector3();
+  const objetivoMira = new THREE.Vector3();
+  const dirSol = new THREE.Vector3();
+  const puntoLocal = new THREE.Vector3();
+
+  let reloj = 0;
+  let movimiento = reducido ? 0 : 1;
+  let visible = 1;
+  let corriendo = true;
+  let raf = 0;
+  let anterior = performance.now();
+  let primerFotograma = true;
+  let fotogramas = 0;
+  let capituloActual = -1;
+  let inicioEntrada = 0;
+
+  /* Freno automático.
+     Adivinar la potencia por núcleos y memoria se equivoca a menudo: un
+     teléfono nuevo con la batería baja, un portátil con gráfica integrada.
+     Esto no adivina, MIDE. Y sólo baja, nunca sube: un sistema que sube y baja
+     se nota mucho más que ir un escalón por debajo. */
+  let medioFotograma = 16;
+  let lento = 0;
+  let escalon = 0;
+  const FRENOS = [1, 0.6, 0.32];
+
+  /** Altura total del documento, en alturas de ventana. */
+  const alturaDocumento = () => (ALTURAS + 1) * window.innerHeight;
+
+  function progresoDeScroll() {
+    const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    return clamp(window.scrollY / max);
+  }
+
+  function redimensionar() {
+    const w = contenedor.clientWidth || window.innerWidth;
+    const h = contenedor.clientHeight || window.innerHeight;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, caps.dpr * FRENOS[escalon]));
+    renderer.setSize(w, h, false);
+    camara.aspect = w / h;
+    camara.updateProjectionMatrix();
+  }
+  redimensionar();
+  window.addEventListener('resize', redimensionar);
+
+  function fotograma() {
+    raf = requestAnimationFrame(fotograma);
+    if (!corriendo) return;
+
+    /* Un solo reloj y el delta acotado por los DOS lados. Con un delta
+       negativo —que sale de mezclar el sello de requestAnimationFrame con
+       performance.now() en equipos lentos— la interpolación exponencial se
+       convierte en una exponencial creciente y la escena se va de escala. */
+    const ahora = performance.now();
+    const transcurrido = Math.max(0, ahora - anterior);
+    const dt = Math.min(transcurrido / 1000, 0.25);
+    anterior = ahora;
+
+    // Media del coste del fotograma, con el factor ligado al TIEMPO: si fuese
+    // por fotogramas, justo en el caso que interesa tardaría una eternidad
+    const mezcla = Math.min(1, (transcurrido / 1000) * 3);
+    medioFotograma += (Math.min(transcurrido, 400) - medioFotograma) * mezcla;
+    if (escalon < FRENOS.length - 1 && visible) {
+      lento = medioFotograma > 34 ? lento + transcurrido / 1000 : 0;
+      if (lento > 2) { escalon++; lento = 0; redimensionar(); }
+    }
+    const freno = FRENOS[escalon];
+
+    reloj += dt * movimiento * visible * AJUSTES.velocidad;
+
+    /* El progreso.
+       Lo que manda es el scroll nativo; lo que se amortigua es esto, no la
+       página. Secuestrar la rueda para «suavizar» rompe la barra, el teclado y
+       el táctil, y la página deja de responder como el visitante espera. */
+    st.objetivo = progresoDeScroll();
+    st.progreso = reducido ? st.objetivo : damp(st.progreso, st.objetivo, 7.5, dt);
+
+    const mundo = mundoEn(st.progreso, AJUSTES);
+
+    /* ── Cámara ─────────────────────────────────────────────────── */
+    poseEn(st.progreso, pose);
+    objetivoPos.set(pose.pos[0], pose.pos[1], pose.pos[2]);
+    objetivoMira.set(pose.mira[0], pose.mira[1], pose.mira[2]);
+
+    // La distancia de cámara se aplica sobre el vector de encuadre, así que
+    // alejarse no cambia hacia dónde se mira
+    if (AJUSTES.distanciaCamara !== 1) {
+      objetivoPos.sub(objetivoMira).multiplyScalar(AJUSTES.distanciaCamara).add(objetivoMira);
+    }
+
+    // Entrada: la cámara llega desde más arriba y más lejos al arrancar
+    if (inicioEntrada > 0) {
+      st.entrada = clamp((ahora - inicioEntrada) / 2600);
+      if (st.entrada >= 1) inicioEntrada = 0;
+    }
+    if (st.entrada < 1) {
+      const e = 1 - (1 - st.entrada) ** 3;
+      objetivoPos.y += (1 - e) * 260;
+      objetivoPos.z += (1 - e) * 180;
+    }
+
+    const lambda = reducido ? 40 : 3.4;
+    posSuave.lerp(objetivoPos, 1 - Math.exp(-lambda * dt));
+    miraSuave.lerp(objetivoMira, 1 - Math.exp(-lambda * 1.25 * dt));
+
+    st.suaveX = damp(st.suaveX, st.punteroX, 2.6, dt);
+    st.suaveY = damp(st.suaveY, st.punteroY, 2.6, dt);
+    const m = movimiento * AJUSTES.movimiento;
+    const respira = Math.sin(reloj * 0.31) * 0.5 * m;
+
+    camara.position.copy(posSuave);
+    camara.position.y += respira;
+    camara.position.x += st.suaveX * 2.2 * m;
+    camara.position.y += -st.suaveY * 1.1 * m;
+    camara.lookAt(miraSuave);
+    camara.rotateZ(Math.sin(reloj * 0.21) * 0.0035 * m - st.suaveX * 0.008 * m);
+    camara.fov = lerp(camara.fov, pose.fov, 1 - Math.exp(-3 * dt));
+    camara.updateProjectionMatrix();
+
+    /* ── Ambiente ───────────────────────────────────────────────── */
+    const amb = mundo.ambiente;
+    niebla.color.setHex(amb.cieloHorizonte);
+    niebla.density = amb.niebla * AJUSTES.niebla;
+    // El sol recorre el cielo: la altura sale del guion, el acimut es fijo
+    const elev = amb.alturaSol * Math.PI * 0.5;
+    dirSol.set(Math.cos(elev) * -0.62, Math.sin(elev) + 0.06, Math.cos(elev) * 0.78).normalize();
+    sol.position.copy(dirSol).multiplyScalar(320).add(miraSuave);
+    sol.color.setHex(amb.colorLuz);
+    sol.intensity = amb.fuerzaLuz * AJUSTES.luz;
+    cielo.intensity = (1.05 + amb.alturaSol * 0.75) * AJUSTES.luz;
+    cielo.color.setHex(amb.cieloAlto);
+    cielo.groundColor.setHex(0x3b3a34);
+    relleno.intensity = (0.4 + amb.alturaSol * 0.35) * AJUSTES.luz;
+    renderer.toneMappingExposure = AJUSTES.exposicion
+      * lerp(0.95, 1.25, amb.alturaSol)
+      * lerp(1.12, 1, clamp(camara.aspect / 1.6));
+    // El objetivo sigue a la cámara: fija la dirección de la luz y, cuando hay
+    // sombras, centra además el mapa donde se está mirando.
+    sol.target.position.copy(miraSuave);
+    sol.target.updateMatrixWorld();
+
+    /* ── Actores ────────────────────────────────────────────────── */
+    barco.userData.actualizar(mundo, reloj, AJUSTES);
+    for (const g of gruas) g.userData.actualizar?.(mundo);
+    camion.userData.actualizar(mundo, reloj, AJUSTES, dt);
+    puerto.userData.actualizar?.(mundo);
+    aduanas.userData.actualizar?.(mundo);
+    centro.userData.actualizar?.(mundo, reloj);
+    ambiental.userData.actualizar?.(mundo, reloj, AJUSTES, freno, camara);
+
+    /* ── El contenedor protagonista ─────────────────────────────────
+       Su sitio depende de en qué punto del viaje esté: en la pila del buque,
+       colgado del spreader o sobre el remolque. Se resuelve transformando un
+       punto local por la matriz del padre correspondiente, que es lo que hace
+       que herede el balanceo del buque y el cabeceo del camión sin tener que
+       copiarlos a mano. */
+    const c = mundo.grua.contenedor;
+    if (c) {
+      heroe.visible = true;
+      if (mundo.p < TRAMOS[2].desde) {
+        barco.updateMatrixWorld(true);
+        puntoLocal.copy(barco.userData.huecoLocal);
+        heroe.position.copy(puntoLocal.applyMatrix4(barco.matrixWorld));
+        heroe.rotation.set(barco.rotation.x, 0, barco.rotation.z);
+      } else {
+        heroe.position.set(c.x, c.y, c.z);
+        // Colgado, se ladea con el balanceo; apoyado, no
+        heroe.rotation.set(0, 0, 0);
+        heroe.rotation.x = mundo.grua.colgando ? clamp(mundo.grua.balanceo * 0.02, -0.06, 0.06) : 0;
+      }
+    } else {
+      // Ya va sobre el camión: se cuelga de su matriz y hereda la suspensión
+      heroe.visible = true;
+      camion.updateMatrixWorld(true);
+      puntoLocal.copy(camion.userData.apoyo);
+      heroe.position.copy(puntoLocal.applyMatrix4(camion.matrixWorld));
+      heroe.quaternion.copy(camion.userData.remolque.getWorldQuaternion(new THREE.Quaternion()));
+      heroe.rotateY(Math.PI / 2);
+    }
+
+    mar.userData.actualizar(mundo, reloj, AJUSTES, dt, dirSol);
+    domoCielo.userData.actualizar(mundo, reloj, AJUSTES, dt, dirSol);
+    domoCielo.position.copy(camara.position);
+
+    /* ── Regiones ───────────────────────────────────────────────── */
+    for (const r of regiones) {
+      r.obj.visible = st.progreso >= r.desde && st.progreso <= r.hasta;
+    }
+
+    renderer.render(escena, camara);
+    fotogramas++;
+
+    // Aviso de capítulo: una sola vez por cambio, no en cada fotograma
+    const cap = capituloEn(st.progreso);
+    const cambio = cap.indice !== capituloActual;
+    if (cambio) capituloActual = cap.indice;
+    alProgreso?.(st.progreso, cap, mundo, cambio);
+
+    if (primerFotograma) {
+      primerFotograma = false;
+      alPintar?.();
+    }
+  }
+  raf = requestAnimationFrame(fotograma);
+
+  const alVisibilidad = () => {
+    corriendo = !document.hidden;
+    visible = corriendo ? 1 : 0;
+    anterior = performance.now();
+  };
+  document.addEventListener('visibilitychange', alVisibilidad);
+
+  if (window.__debugNX) {
+    window.__escenaNX = {
+      escena, camara, renderer, barco, gruas, camion, heroe, st, AJUSTES, MEDIDAS,
+      get fotogramas() { return fotogramas; },
+      get freno() { return { escalon, medioFotograma: Math.round(medioFotograma) }; },
+      mundo: () => mundoEn(st.progreso, AJUSTES),
+    };
+  }
+
+  return {
+    entrar() {
+      if (reducido) { st.entrada = 1; return; }
+      inicioEntrada = performance.now();
+      st.entrada = 0;
+    },
+    puntero(x, y) { st.punteroX = x; st.punteroY = y; },
+    set movimiento(v) { movimiento = v ? 1 : 0; },
+    get progreso() { return st.progreso; },
+    get fotogramas() { return fotogramas; },
+    get topeFrenos() { return FRENOS.length; },
+    alturaDocumento,
+    medir: redimensionar,
+    destruir() {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', redimensionar);
+      document.removeEventListener('visibilitychange', alVisibilidad);
+      escena.traverse((o) => { o.userData?.liberar?.(); });
+      renderer.dispose();
+      renderer.domElement.remove();
+    },
+  };
+}
