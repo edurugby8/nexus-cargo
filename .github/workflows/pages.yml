@@ -26,6 +26,11 @@ jobs:
       - run: npm ci
       - run: npm run build
       - uses: actions/configure-pages@v5
+        # Intenta activar Pages desde el propio flujo. Si el token del flujo no
+        # tiene permiso de administración, falla aquí y hay que darle una vez
+        # al interruptor en Settings → Pages → Source: GitHub Actions.
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
