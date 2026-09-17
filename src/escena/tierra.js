@@ -15,7 +15,8 @@ import {
   texturaHormigon, texturaAsfalto, texturaChapa, texturaNave, texturaMancha,
 } from './texturas.js';
 import {
-  aceroPintado, aceroDesnudo, hormigon, pintura, luminoso, cristal, relieveAsfalto,
+  aceroPintado, aceroDesnudo, hormigon, pintura, luminoso, cristal,
+  relieveAsfalto, relieveHormigon,
 } from './materiales.js';
 
 /* ── Muelle y explanada de la terminal ────────────────────────────── */
@@ -25,17 +26,38 @@ export function crearPuerto({ caps }) {
   const aDesechar = [];
   const azar = azarCon(7788);
 
+  /* El teselado del pavimento, proporcional.
+     La textura de hormigón se repetía 26 × 26 sobre un plano de 1400 × 520.
+     Como el plano no es cuadrado, cada losa salía estirada 2,7 a 1 y la
+     retícula de juntas se leía desde el aire como un rayado en diagonal —un
+     garabato, no un pavimento—. Repitiendo en proporción al tamaño real, la
+     losa vuelve a ser cuadrada y mide unos catorce metros, que es lo que mide
+     un paño de solera de patio portuario. */
   const mapaSuelo = texturaHormigon();
-  const matSuelo = new THREE.MeshStandardMaterial({ map: mapaSuelo, roughness: 0.94, metalness: 0.04 });
+  // Tesela de 26 m: cuantas menos repeticiones, menos se ve el patrón
+  mapaSuelo.repeat.set(3400 / 26, 1700 / 26);
+  const matSuelo = new THREE.MeshStandardMaterial({
+    map: mapaSuelo, roughness: 0.94, metalness: 0.04,
+    normalMap: relieveHormigon(), normalScale: new THREE.Vector2(0.35, 0.35),
+  });
   const matBorde = new THREE.MeshStandardMaterial({ color: 0x6f7378, roughness: 0.9 });
   const matEstructura = new THREE.MeshStandardMaterial({ color: 0x8d949c, roughness: 0.7, metalness: 0.4 });
+  const matOscuroRTG = new THREE.MeshStandardMaterial({ color: 0x23282e, roughness: 0.72, metalness: 0.45 });
+  aDesechar.push(matOscuroRTG);
   aDesechar.push(mapaSuelo, matSuelo, matBorde, matEstructura);
 
-  // La explanada: desde el canto del muelle hacia tierra
-  const geoSuelo = new THREE.PlaneGeometry(1400, 520);
+  /* La explanada: desde el canto del muelle hacia tierra.
+     Medía 1400 × 520 y desde la cámara aérea se veían sus CUATRO BORDES: el
+     puerto entero era una losa rectangular flotando en medio del azul, que es
+     exactamente el aspecto de maqueta que hay que evitar. Ahora se extiende
+     hasta donde la niebla y el horizonte se la comen, así que el muelle da a
+     tierra firme en lugar de acabarse. El detalle —bloques, grúas, tractores—
+     sigue donde estaba: lo que se amplía es el suelo, que cuesta dos
+     triángulos. */
+  const geoSuelo = new THREE.PlaneGeometry(3400, 1700);
   const suelo = new THREE.Mesh(geoSuelo, matSuelo);
   suelo.rotation.x = -Math.PI / 2;
-  suelo.position.set(0, 0.6, MEDIDAS.muelle - 260);
+  suelo.position.set(0, 0.6, MEDIDAS.muelle - 850);
   suelo.receiveShadow = true;
   suelo.userData.envolvente = true;
   grupo.add(suelo);
@@ -78,20 +100,182 @@ export function crearPuerto({ caps }) {
     grupo.add(c);
   }
 
-  /* Pilas de contenedores del patio. Van instanciadas: son cientos y aportan
-     masa y color, no detalle. */
-  const zonas = [];
-  for (let i = 0; i < 9; i++) {
-    zonas.push({
-      x: -420 + i * 105 + (i % 2) * 18,
-      z: MEDIDAS.muelle - 70 - (i % 3) * 58,
-      y: 0.6,
-      filas: 6,
-      altura: 3 + (i % 3),
-    });
+  /* ── EL PATIO ─────────────────────────────────────────────────────
+     Bloques largos y densos, TODOS paralelos al muelle, separados por calles
+     de la misma anchura y repetidos hacia el fondo. Ésa es la retícula que
+     hace reconocible una terminal desde el aire, y es lo que no había: antes
+     eran nueve zonas sueltas colocadas en zigzag con un `(i % 2) * 18` de
+     desplazamiento, medio vacías, que leídas desde arriba eran confeti.
+
+     Las medidas son las de una terminal de verdad: bloque de seis filas de
+     ancho —unos 15 m—, calle de RTG entre bloques, y filas de bloques cada
+     42 m hacia tierra. El primero arranca a 80 m del cantil, que es el espacio
+     que necesitan las grúas de muelle y los tractores de patio. */
+  /* La profundidad del patio es lo que más cuesta y menos se ve: las filas
+     del fondo quedan a doscientos metros y medio tapadas por las de delante.
+     Cuatro filas cuestan un 30 % menos que cinco y no se nota la diferencia. */
+  const FILAS_BLOQUE = caps.nivel === 'alto' ? 4 : caps.nivel === 'medio' ? 3 : 2;
+  const BLOQUES_FILA = caps.nivel === 'alto' ? 6 : caps.nivel === 'medio' ? 5 : 3;
+  const COLS = caps.nivel === 'bajo' || caps.nivel === 'minimo' ? 6 : 8;
+
+  const bloques = [];
+  const zonasRTG = [];
+  for (let f = 0; f < FILAS_BLOQUE; f++) {
+    const z = MEDIDAS.muelle - 82 - f * 42;
+    for (let b = 0; b < BLOQUES_FILA; b++) {
+      const x = (b - (BLOQUES_FILA - 1) / 2) * 148;
+      bloques.push({ x, z, cols: COLS, filas: 6, alto: 4 + ((f + b) % 2), y: 0.6 });
+    }
+    zonasRTG.push({ z, ancho: BLOQUES_FILA * 148 });
   }
-  const pilas = crearPilas({ cuantos: caps.pilas, semilla: 5, zonas });
+  const pilas = crearPilas({ bloques, semilla: 5 });
   grupo.add(pilas);
+
+  /* Marcas de calle: una línea continua a cada lado de cada calle de bloques.
+     Es lo que convierte una explanada gris en un patio organizado, y cuesta
+     una malla instanciada. */
+  const geoRaya = new THREE.PlaneGeometry(BLOQUES_FILA * 148 + 40, 0.3);
+  const matRaya = pintura(0xd9d4c2);
+  aDesechar.push(geoRaya);
+  const rayas = new THREE.InstancedMesh(geoRaya, matRaya, FILAS_BLOQUE * 2);
+  const dummy = new THREE.Object3D();
+  let nr = 0;
+  for (const zona of zonasRTG) {
+    for (const s2 of [-1, 1]) {
+      dummy.position.set(0, 0.63, zona.z + s2 * 12.5);
+      dummy.rotation.set(-Math.PI / 2, 0, 0);
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      rayas.setMatrixAt(nr++, dummy.matrix);
+    }
+  }
+  rayas.count = nr;
+  rayas.frustumCulled = false;
+  rayas.userData.envolvente = true;
+  grupo.add(rayas);
+
+  /* ── Grúas de patio (RTG) ─────────────────────────────────────────
+     Y esto es lo que más se echaba en falta. Una terminal de contenedores
+     vista desde arriba es, antes que nada, una fila de pórticos a caballo
+     sobre los bloques: 26 m de luz, 22 de alto, sobre neumáticos. Sin ellos,
+     el patio son cajas sobre asfalto; con ellos, se entiende que ahí trabaja
+     alguien. Son mucho más pequeñas que las de muelle —22 m contra 82— y
+     precisamente por eso dan la escala de las grandes. */
+  const matRTG = aceroPintado('#c9ccd0', { semilla: 71, rugosidad: 0.62, metal: 0.4 });
+  const matRTGviga = aceroPintado('#2f6f86', { semilla: 72, rugosidad: 0.6, metal: 0.35 });
+  const LUZ = 26;
+  const ALTO_RTG = 21;
+  const geoPataRTG = new THREE.BoxGeometry(1.1, ALTO_RTG, 1.1);
+  const geoVigaRTG = new THREE.BoxGeometry(1.5, 1.7, LUZ + 3);
+  const geoTravRTG = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+  const geoRuedaRTG = new THREE.BoxGeometry(2.6, 1.5, 1.2);
+  const geoCarroRTG = new THREE.BoxGeometry(3.4, 1.4, 4.4);
+  aDesechar.push(geoPataRTG, geoVigaRTG, geoTravRTG, geoRuedaRTG, geoCarroRTG);
+
+  const rtgAzar = azarCon(3311);
+  for (let f = 0; f < FILAS_BLOQUE; f++) {
+    const zona = zonasRTG[f];
+    // Una o dos por fila de bloques, nunca en el mismo sitio
+    const cuantas = caps.nivel === 'alto' ? 2 : 1;
+    for (let k = 0; k < cuantas; k++) {
+      const x = (rtgAzar() - 0.5) * zona.ancho * 0.7;
+      const rtg = new THREE.Group();
+      rtg.position.set(x, 0.6, zona.z);
+      for (const sz of [-1, 1]) {
+        for (const sx of [-1, 1]) {
+          const pata = new THREE.Mesh(geoPataRTG, matRTG);
+          pata.position.set(sx * 5.2, ALTO_RTG / 2 + 1.5, sz * (LUZ / 2));
+          pata.castShadow = true;
+          rtg.add(pata);
+          const rueda = new THREE.Mesh(geoRuedaRTG, matOscuroRTG);
+          rueda.position.set(sx * 5.2, 0.75, sz * (LUZ / 2));
+          rtg.add(rueda);
+        }
+        // Travesaño bajo entre las dos patas del mismo lado
+        const trav = new THREE.Mesh(new THREE.BoxGeometry(11.5, 0.9, 0.9), matRTG);
+        trav.position.set(0, 3.4, sz * (LUZ / 2));
+        rtg.add(trav);
+        aDesechar.push(trav.geometry);
+      }
+      // La viga, a caballo sobre el bloque
+      for (const sx of [-1, 1]) {
+        const viga = new THREE.Mesh(geoVigaRTG, matRTGviga);
+        viga.position.set(sx * 5.2, ALTO_RTG + 2.3, 0);
+        viga.castShadow = true;
+        rtg.add(viga);
+      }
+      const trav2 = new THREE.Mesh(geoTravRTG, matRTG);
+      trav2.scale.set(9, 0.8, 1);
+      trav2.position.set(0, ALTO_RTG + 2.3, 0);
+      rtg.add(trav2);
+      // El carro, descentrado: cada grúa está en un punto distinto de su ciclo
+      const carro = new THREE.Mesh(geoCarroRTG, matOscuroRTG);
+      carro.position.set(0, ALTO_RTG + 1.1, (rtgAzar() - 0.5) * LUZ * 0.7);
+      carro.castShadow = true;
+      rtg.add(carro);
+      grupo.add(rtg);
+    }
+  }
+
+  /* ── Tractores de patio en la franja del muelle ───────────────────
+     Entre los carriles de las grúas y el primer bloque quedaban ochenta metros
+     de asfalto vacío, y ése es justamente el sitio más activo de una terminal:
+     por ahí circulan sin parar los tractores que llevan las cajas del costado
+     del buque al patio. Vacío, el muelle parecía cerrado; con una fila de
+     cabezas tractoras y sus plataformas, se entiende que está operando.
+
+     Son cajas, y está bien que lo sean: se ven desde ochenta metros de altura
+     y lo que aportan es ritmo y escala, no detalle. */
+  /* Amarillo de maquinaria. Los tractores iban en gris sobre un pavimento
+     gris y a ochenta metros de altura no se veían: el muelle seguía pareciendo
+     vacío. La maquinaria de puerto va pintada de amarillo precisamente para
+     que se vea, y aquí cumple la misma función. */
+  const matTractora = aceroPintado('#c9a415', { semilla: 81, rugosidad: 0.55, metal: 0.35 });
+  const matPlata = aceroPintado('#4a5058', { semilla: 82, rugosidad: 0.7, metal: 0.45 });
+  const geoTractora = new THREE.BoxGeometry(5.6, 2.9, 2.5);
+  const geoPlataforma = new THREE.BoxGeometry(12.4, 1.1, 2.5);
+  aDesechar.push(geoTractora, geoPlataforma);
+
+  const flotaAzar = azarCon(5150);
+  const CUANTOS = caps.nivel === 'alto' ? 26 : caps.nivel === 'medio' ? 18 : 9;
+  const tractoras = new THREE.InstancedMesh(geoTractora, matTractora, CUANTOS);
+  const plataformas = new THREE.InstancedMesh(geoPlataforma, matPlata, CUANTOS);
+  const cajasPlata = [];
+  for (let i = 0; i < CUANTOS; i++) {
+    const x = -560 + flotaAzar() * 1120;
+    // Dos carriles: el de ida junto a las grúas y el de vuelta hacia el patio
+    const z = MEDIDAS.muelle - (flotaAzar() > 0.5 ? 46 : 62);
+    dummy.rotation.set(0, 0, 0);
+    dummy.scale.setScalar(1);
+    dummy.position.set(x, 2.05, z);
+    dummy.updateMatrix();
+    tractoras.setMatrixAt(i, dummy.matrix);
+    dummy.position.set(x - 9.2, 1.35, z);
+    dummy.updateMatrix();
+    plataformas.setMatrixAt(i, dummy.matrix);
+    // La mitad van cargadas, que es lo que cuenta que están trabajando
+    if (flotaAzar() > 0.45) cajasPlata.push({ x: x - 9.2, z });
+  }
+  tractoras.castShadow = plataformas.castShadow = true;
+  tractoras.frustumCulled = plataformas.frustumCulled = false;
+  grupo.add(tractoras, plataformas);
+
+  if (cajasPlata.length) {
+    const geoCajaPlata = new THREE.BoxGeometry(12.192, 2.896, 2.438);
+    const matCajaPlata = aceroPintado('#7d2f2a', { semilla: 83, rugosidad: 0.78, metal: 0.2 });
+    aDesechar.push(geoCajaPlata);
+    const cargadas = new THREE.InstancedMesh(geoCajaPlata, matCajaPlata, cajasPlata.length);
+    cajasPlata.forEach((c, i) => {
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(1);
+      dummy.position.set(c.x, 3.34, c.z);
+      dummy.updateMatrix();
+      cargadas.setMatrixAt(i, dummy.matrix);
+    });
+    cargadas.castShadow = true;
+    cargadas.frustumCulled = false;
+    grupo.add(cargadas);
+  }
 
   // Torres de iluminación del puerto: dan la escala vertical del patio
   const geoTorre = new THREE.CylinderGeometry(0.3, 0.5, 34, 6);

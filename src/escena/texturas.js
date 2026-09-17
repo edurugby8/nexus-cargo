@@ -107,10 +107,18 @@ export function texturaHormigon() {
       ctx.beginPath(); ctx.moveTo((w / 4) * i, 0); ctx.lineTo((w / 4) * i, h); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, (h / 4) * i); ctx.lineTo(w, (h / 4) * i); ctx.stroke();
     }
-    for (let i = 0; i < 30; i++) {
-      const g = ctx.createRadialGradient(azar() * w, azar() * h, 0, azar() * w, azar() * h, w * 0.1);
-      g.addColorStop(0, 'rgba(24,24,26,.18)');
-      g.addColorStop(1, 'rgba(24,24,26,0)');
+    /* Manchas de aceite y rodadura. Van POCAS y SUAVES.
+       Eran treinta al 18 % y, con la tesela repitiéndose cien veces a lo ancho
+       de la explanada, formaban una cuadrícula regular de lamparones que se
+       veía desde el aire más que el propio pavimento. Una textura que se repite
+       mucho tiene que ser casi lisa: lo que se note será el patrón, no la
+       mancha. */
+    for (let i = 0; i < 9; i++) {
+      const cx = azar() * w;
+      const cy = azar() * h;
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, w * 0.16);
+      g.addColorStop(0, 'rgba(26,26,28,.09)');
+      g.addColorStop(1, 'rgba(26,26,28,0)');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, w, h);
     }

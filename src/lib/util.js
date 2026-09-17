@@ -119,7 +119,6 @@ export function medirEquipo() {
     antialias: nivel === 'alto' || nivel === 'medio',
     sombras: nivel === 'alto',
     // Cuántos contenedores apilados hay en el puerto (van instanciados)
-    pilas: porNivel(520, 320, 170, 90),
     // Divisiones de la malla del mar
     mar: porNivel(160, 110, 72, 44),
     // Partículas ambientales: gaviotas, polvo, salpicadura

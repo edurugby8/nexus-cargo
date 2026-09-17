@@ -337,34 +337,73 @@ export function crearContenedor({ protagonista = false, color = '#c85a1e', semil
 }
 
 /**
- * Las pilas del puerto, en UNA sola llamada de dibujo por color.
+ * EL PATIO DE CONTENEDORES.
  *
- * Son cientos de contenedores y todos comparten geometría; instanciarlos es la
- * diferencia entre cuatrocientas llamadas y seis. La geometría es la simple
- * —sin corrugado— porque la cámara nunca se acerca a ellos: lo que aportan es
- * masa, color y escala, y eso se lee de lejos.
+ * Lo que hace reconocible una terminal vista desde el aire no son los
+ * contenedores: es la RETÍCULA. Bloques largos y densos, todos paralelos al
+ * muelle, separados por calles rectas de la misma anchura, repetidos hasta el
+ * fondo. Sin esa retícula, unos cuantos contenedores sobre asfalto son
+ * cajas tiradas por el suelo.
  *
- * Lo que sí se corrigió es el APILADO. Antes la altura salía de una cuenta
- * aritmética sobre el índice y las pilas quedaban en escalones regulares, que
- * es justo lo que no hace un patio de verdad. Ahora la altura viene de un
- * ruido determinista por columna: irregular, pero igual en cada recarga.
+ * La versión anterior fallaba justo ahí, y por un motivo de diseño que conviene
+ * dejar escrito porque es fácil de repetir: se escalaba el NÚMERO DE
+ * CONTENEDORES con el nivel del equipo, repartiéndolo entre un número fijo de
+ * posiciones. En gama alta eran 520 contenedores para 270 posiciones —dos de
+ * altura media— y en gama baja 90 para las mismas 270. Resultado: bloques
+ * medio vacíos, con huecos aleatorios, que desde arriba se leían como confeti.
+ *
+ * Ahora se escala el NÚMERO DE BLOQUES. Cada bloque que se dibuja se dibuja
+ * LLENO, con su perfil de alturas; si el equipo no da para más, hay menos
+ * bloques, pero los que hay parecen un patio de verdad. Es la diferencia entre
+ * bajar la calidad y bajar la cantidad.
+ *
+ * Todo instanciado: son miles de cajas y seis llamadas de dibujo.
  */
-export function crearPilas({ cuantos, semilla = 1, zonas }) {
+export function crearPilas({ bloques, semilla = 1 }) {
   const grupo = new THREE.Group();
   const aDesechar = [];
   const COLORES = ['#2e5d86', '#7d2f2a', '#3f6b4a', '#8a6a24', '#4a4f57', '#6b3a5e'];
-  const porColor = Math.ceil(cuantos / COLORES.length);
   const geo = new THREE.BoxGeometry(L, H, A);
   const dummy = new THREE.Object3D();
   aDesechar.push(geo);
 
-  // Ruido barato y determinista: mismo patio en cada visita
+  /* Ruido determinista. El mismo patio en cada visita: un patio que cambia al
+     recargar delata que es un decorado. */
   const azar = (n) => {
     const x = Math.sin(n * 127.1 + semilla * 311.7) * 43758.5453;
     return x - Math.floor(x);
   };
 
+  /* Se recorre el patio entero UNA vez para saber cuántas cajas de cada color
+     hacen falta, y así cada malla instanciada se reserva justa. Reservar de
+     más cuesta memoria de vídeo; reservar de menos recorta el patio. */
+  const puestos = [];
+  bloques.forEach((b, bi) => {
+    for (let c = 0; c < b.cols; c++) {
+      for (let f = 0; f < b.filas; f++) {
+        /* El perfil de alturas. Un bloque de verdad no es un prisma perfecto:
+           tiene la cara de trabajo más baja —por donde entra la grúa— y algún
+           hueco donde acaban de sacar una caja. Pero es MAYORITARIAMENTE
+           lleno, y ésa es la diferencia. */
+        const r = azar(bi * 7919 + c * 131 + f * 17);
+        const borde = (c === 0 || c === b.cols - 1) ? 1 : 0;
+        let alto = Math.max(1, Math.round(b.alto - borde - r * 1.6));
+        if (r > 0.93) alto = 0;                 // un hueco de vez en cuando
+        for (let piso = 0; piso < alto; piso++) {
+          puestos.push({
+            x: b.x + (c - (b.cols - 1) / 2) * (L + 0.6),
+            y: (b.y || 0) + H / 2 + piso * (H + 0.04),
+            z: b.z + (f - (b.filas - 1) / 2) * (A + 0.12),
+            color: Math.floor(azar(bi * 331 + c * 71 + f * 13 + piso * 3) * COLORES.length),
+          });
+        }
+      }
+    }
+  });
+
   COLORES.forEach((color, ci) => {
+    const mios = puestos.filter((p) => p.color === ci);
+    if (!mios.length) return;
     const mapa = texturaContenedorGenerico(color, semilla + ci);
     const mat = new THREE.MeshStandardMaterial({
       map: mapa, roughness: 0.78, metalness: 0.2,
@@ -372,23 +411,16 @@ export function crearPilas({ cuantos, semilla = 1, zonas }) {
       normalScale: new THREE.Vector2(0.4, 0.4),
     });
     aDesechar.push(mapa, mat);
-    const malla = new THREE.InstancedMesh(geo, mat, porColor);
+    const malla = new THREE.InstancedMesh(geo, mat, mios.length);
     malla.castShadow = true;
     malla.receiveShadow = true;
-    for (let n = 0; n < porColor; n++) {
-      const zona = zonas[(n + ci) % zonas.length];
-      const fila = Math.floor(n / 5) % zona.filas;
-      const col = n % 5;
-      const altura = Math.floor(azar(n * 13 + ci * 977) * zona.altura);
-      dummy.position.set(
-        zona.x + (col - 2) * (L + 0.9),
-        H / 2 + altura * (H + 0.04) + zona.y,
-        zona.z + fila * (A + 0.7),
-      );
+    mios.forEach((p, n) => {
+      dummy.position.set(p.x, p.y, p.z);
       dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(1);
       dummy.updateMatrix();
       malla.setMatrixAt(n, dummy.matrix);
-    }
+    });
     malla.instanceMatrix.needsUpdate = true;
     malla.frustumCulled = false;
     grupo.add(malla);

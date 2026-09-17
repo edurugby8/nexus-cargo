@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import { texturaMar, texturaCielo } from './texturas.js';
+import { MEDIDAS } from './ruta.js';
 
 /* OJO con los acentos graves dentro de estos literales: uno solo, aunque esté
    dentro de un comentario de GLSL, CIERRA la cadena de JavaScript y rompe la
@@ -26,6 +27,7 @@ import { texturaMar, texturaCielo } from './texturas.js';
 const VERTICE = /* glsl */ `
   uniform float uTiempo;
   uniform float uOleaje;
+  uniform float uCostaZ;
 
   varying vec3 vMundo;
   varying vec3 vNormal;
@@ -47,14 +49,30 @@ const VERTICE = /* glsl */ `
     vec3 pos = position;
     vec4 mundo = modelMatrix * vec4(pos, 1.0);
     float t = uTiempo;
-    float h = ola(mundo.xz, t) * uOleaje;
+    /* ABRIGO DE PUERTO.
+       La ola llega a 1,58 m de cresta y la explanada del muelle está a 0,60:
+       las crestas asomaban POR ENCIMA del pavimento, y desde el aire se veían
+       como manchas blancas de espuma repartidas por el asfalto del patio. El
+       mar es un solo plano y pasa por debajo de todo el puerto, así que
+       bastaba con que la ola subiera más que el muelle.
+       Se apaga la ola al pasar la línea de costa. Además de tapar el fallo es
+       lo que hace el agua de verdad: dentro de una dársena, abrigada por el
+       muelle, no hay oleaje. */
+    /* El abrigo no llega a CERO, y ahí está el matiz. Apagando la ola del todo
+       la dársena quedaba como una lámina de plástico azul —peor que el fallo
+       que venía a arreglar—. Dentro de un puerto no hay mar de fondo, pero sí
+       rizado: el agua se mueve, sólo que unos centímetros. Se deja un 14 %,
+       que son 22 cm de cresta: suficiente para que el agua viva y muy por
+       debajo de los 60 cm del pavimento. */
+    float abrigo = mix(0.14, 1.0, smoothstep(uCostaZ - 4.0, uCostaZ + 12.0, mundo.z));
+    float h = ola(mundo.xz, t) * uOleaje * abrigo;
     pos.z += h;
 
     // Normal por diferencias finitas sobre la misma función de ola: así el
     // sombreado no puede desincronizarse de la forma.
     float e = 1.6;
-    float hx = ola(mundo.xz + vec2(e, 0.0), t) * uOleaje;
-    float hz = ola(mundo.xz + vec2(0.0, e), t) * uOleaje;
+    float hx = ola(mundo.xz + vec2(e, 0.0), t) * uOleaje * abrigo;
+    float hz = ola(mundo.xz + vec2(0.0, e), t) * uOleaje * abrigo;
     vec3 n = normalize(vec3(-(hx - h) / e, 1.0, -(hz - h) / e));
     vNormal = n;
 
@@ -134,6 +152,7 @@ export function crearMar({ caps }) {
     uniforms: {
       uTiempo: { value: 0 },
       uOleaje: { value: 1 },
+      uCostaZ: { value: MEDIDAS.muelle },
       /* Un mar demasiado oscuro se come las siluetas. Lo que hace legible a
          un buque a contraluz no es iluminarlo más, es que el agua de detrás
          sea más clara que él. */
