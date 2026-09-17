@@ -77,13 +77,18 @@ export function crearBarco({ caps }) {
   const aDesechar = [];
   const azar = azarCon(9482019);
 
-  const mapaCasco = texturaChapa('#1f3a52', 3, 0.9);
+  /* El casco se aclara. En el plano aéreo de apertura salía casi negro —el
+     azul de la chapa por 0,9 de óxido y con el sol todavía bajo— y una masa
+     negra de 294 metros contra el mar no se lee como un buque, se lee como un
+     agujero. Un azul de casco de verdad es oscuro pero conserva el tono, y
+     ahí es donde se ve la forma. */
+  const mapaCasco = texturaChapa('#2d4d69', 3, 0.55);
   mapaCasco.repeat.set(9, 2);
   const matCasco = new THREE.MeshStandardMaterial({
-    map: mapaCasco, color: 0xffffff, roughness: 0.72, metalness: 0.35, side: THREE.DoubleSide,
+    map: mapaCasco, color: 0xffffff, roughness: 0.68, metalness: 0.38, side: THREE.DoubleSide,
   });
   const matObraViva = new THREE.MeshStandardMaterial({ color: 0x7a2a22, roughness: 0.85, metalness: 0.1 });
-  const matCubierta = new THREE.MeshStandardMaterial({ color: 0x2c3c4a, roughness: 0.9, metalness: 0.15 });
+  const matCubierta = new THREE.MeshStandardMaterial({ color: 0x3a4c5c, roughness: 0.88, metalness: 0.18 });
   const matBlanco = new THREE.MeshStandardMaterial({ color: 0xd8dde2, roughness: 0.6, metalness: 0.2 });
   const matOscuro = new THREE.MeshStandardMaterial({ color: 0x1a232c, roughness: 0.5, metalness: 0.6 });
   aDesechar.push(mapaCasco, matCasco, matObraViva, matCubierta, matBlanco, matOscuro);
@@ -135,7 +140,8 @@ export function crearBarco({ caps }) {
      lo que cuenta la escala es la MASA apilada y el ritmo de las bahías. */
   const L = 12.192; const A = 2.438; const Hc = 2.896;
   const COLORES = ['#2e5d86', '#7d2f2a', '#3f6b4a', '#8a6a24', '#4a4f57', '#a85f1c'];
-  const bahias = caps.nivel === 'alto' ? 15 : caps.nivel === 'medio' ? 12 : 8;
+  // Bahías suficientes para cubrir la eslora de carga, no sólo el centro
+  const bahias = caps.nivel === 'alto' ? 18 : caps.nivel === 'medio' ? 14 : 9;
   const filas = caps.nivel === 'alto' ? 13 : caps.nivel === 'medio' ? 9 : 6;
   const pisos = caps.nivel === 'minimo' ? 3 : 5;
   const geoCaja = new THREE.BoxGeometry(L, Hc, A);
@@ -153,12 +159,22 @@ export function crearBarco({ caps }) {
     for (let b = 0; b < bahias && n < porColor; b++) {
       for (let f = 0; f < filas && n < porColor; f++) {
         for (let piso = 0; piso < pisos && n < porColor; piso++) {
-          if ((b * 31 + f * 17 + piso * 7 + ci) % COLORES.length !== ci) continue;
+          /* El reparto de colores, corregido.
+             Decía `(b*31 + f*17 + piso*7 + ci) % 6 !== ci`, y ese `+ ci` a la
+             izquierda se cancela con el `ci` de la derecha: la condición se
+             reduce a `(b*31 + f*17 + piso*7) % 6 === 0`, LA MISMA para los
+             seis colores. Consecuencia doble y de las que no dan ningún aviso:
+             sólo se llenaba un sexto de las posiciones —la cubierta de un
+             portacontenedores de 9 400 TEU salía prácticamente vacía— y en ese
+             sexto los seis colores se apilaban en el mismo sitio, peleándose
+             por el mismo píxel. Se veía desde el aire, no desde el costado, y
+             por eso no había salido hasta ahora. */
+          if ((b * 31 + f * 17 + piso * 7) % COLORES.length !== ci) continue;
           // Los perfiles de pila bajan hacia proa, como en la realidad
           const limite = b > bahias * 0.75 ? pisos - 2 : pisos;
           if (piso >= limite) continue;
           dummy.position.set(
-            -E * 0.22 + b * (L + 0.8),
+            -E * 0.32 + b * (L + 0.8),
             F + 0.75 + Hc / 2 + piso * (Hc + 0.04),
             (f - (filas - 1) / 2) * (A + 0.08),
           );

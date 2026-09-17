@@ -23,6 +23,25 @@ Cinco piezas, que son las que el recorrido enseña de cerca:
 | Tractora + semirremolque portacontenedores | conjunto de 16,5 m |
 | Nave de distribución con muelles de carga | ~168 × 72 × 13,5 m |
 
+## Reverificado en la tercera fase
+
+El encargo de la tercera fase autoriza explícitamente modelos GLB/glTF «con
+licencia gratuita y comercial», así que la comprobación se repitió entera. El
+resultado es el mismo, y se deja la fecha para que se pueda volver a mirar:
+
+| Origen | 17 SEP 2026 |
+|---|---|
+| `api.sketchfab.com` | CONNECT rechazado |
+| `api.polyhaven.com` | CONNECT rechazado |
+| `cdn.jsdelivr.net` | CONNECT rechazado |
+| `ambientcg.com` | CONNECT rechazado |
+| `raw.githubusercontent.com` | HTTP 200 |
+
+Sigue sin haber ninguna fuente alcanzable que documente licencia por archivo y
+contenga alguna de las cinco piezas. Se mantiene la alternativa prevista en el
+encargo, y el proyecto queda preparado para cambiar de idea: ver el último
+apartado.
+
 ## Qué se encontró
 
 Las fuentes habituales de modelos 3D con licencia clara **no son alcanzables

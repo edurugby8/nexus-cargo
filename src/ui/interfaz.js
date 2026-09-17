@@ -84,6 +84,44 @@ export function montarHud() {
   if (!hud || !datos) return () => {};
   let ultimo = null;
 
+  /* ── Plegado ────────────────────────────────────────────────────
+     Abierto en escritorio, plegado en móvil. No es una preferencia estética:
+     en una pantalla estrecha el panel desplegado tapa dos o tres líneas del
+     capítulo que se está leyendo, y lo que hace falta saber mientras se lee es
+     sólo qué etapa va. Las cifras están a un toque.
+
+     La elección del visitante se recuerda, porque quien lo abre normalmente
+     quiere que siga abierto en el capítulo siguiente. Y se guarda dentro de un
+     `try`: en modo privado `localStorage` lanza, y una preferencia de interfaz
+     no puede tumbar la página. */
+  const conmutar = document.getElementById('hud-conmutar');
+  const estrecho = () => window.matchMedia('(max-width: 760px)').matches;
+
+  let abierto = !estrecho();
+  try {
+    const guardado = localStorage.getItem('nexus:panel');
+    if (guardado === 'abierto' || guardado === 'plegado') abierto = guardado === 'abierto';
+  } catch { /* modo privado */ }
+
+  const aplicarPliegue = () => {
+    hud.toggleAttribute('data-abierto', abierto);
+    conmutar?.setAttribute('aria-expanded', String(abierto));
+    /* El estado se publica también en la raíz. Los controles de sonido y
+       movimiento están ANTES que el panel en el documento, así que no hay
+       selector de hermano que los alcance; con el dato en `<html>` los alcanza
+       cualquiera. En móvil el panel desplegado crece hacia arriba y se comía
+       los dos botones —medido en 390 y en 360—, así que suben mientras está
+       abierto. */
+    document.documentElement.dataset.panel = abierto ? 'abierto' : 'plegado';
+  };
+  aplicarPliegue();
+
+  conmutar?.addEventListener('click', () => {
+    abierto = !abierto;
+    try { localStorage.setItem('nexus:panel', abierto ? 'abierto' : 'plegado'); } catch { /* modo privado */ }
+    aplicarPliegue();
+  });
+
   return (id, mundo, local = 0) => {
     const cap = CAPITULOS.find((c) => c.id === id);
     if (id !== ultimo) {

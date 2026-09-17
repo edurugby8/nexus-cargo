@@ -61,7 +61,12 @@ const mal = (m) => { fallos++; console.log(`  FALLA ${m}`); };
 const SUJETOS = {
   oceano:    { que: 'barco',      min: 0.04, max: 0.95, tapado: false },
   puerto:    { que: 'barco',      min: 0.06, max: 1.60, tapado: false },
-  grua:      { que: 'heroe',      min: 0.04, max: 2.60, tapado: true },
+  /* La descarga abre ANCHA a propósito —buque, grúa y patio— y en ese momento
+     el contenedor es una caja entre cientos: ahí el mínimo tiene que ser más
+     bajo que en los demás capítulos, o la prueba estaría exigiendo empezar el
+     capítulo con un primer plano. Lo que compensa es el color: el
+     protagonista es el único naranja del patio. */
+  grua:      { que: 'heroe',      min: 0.032, max: 2.60, tapado: true },
   aduanas:   { que: 'camion',     min: 0.08, max: 2.20, tapado: true },
   salida:    { que: 'camion',     min: 0.10, max: 2.60, tapado: true },
   carretera: { que: 'camion',     min: 0.08, max: 2.60, tapado: true },

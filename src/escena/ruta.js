@@ -557,199 +557,182 @@ export function ambienteEn(p) {
  * brusco: no hay cortes entre capítulos porque no hay capítulos en la curva,
  * hay una sola trayectoria.
  */
+/**
+ * LA CÁMARA: UN RIG AÉREO CONTINUO.
+ * ═══════════════════════════════════════════════════════════════════
+ *
+ * Esta parte se rehízo entera, y el motivo es el mejor que puede haber para
+ * rehacer algo: la versión anterior era técnicamente correcta y se veía mal.
+ *
+ * Tenía cuarenta y dos planos escritos a mano, cada uno con su desplazamiento
+ * en coordenadas del mundo. Cada uno, por separado, estaba bien compuesto. El
+ * problema era el conjunto: la cámara saltaba de un tres cuartos alto a un
+ * contrapicado, de ahí a un lateral por el otro lado, luego a ras de rueda y
+ * después a sesenta metros de altura. Cada corte cruzaba el eje. Y cruzar el
+ * eje una vez es un recurso; cruzarlo cuarenta y dos veces en un recorrido de
+ * scroll continuo es marear al visitante y hacerle perder el contenedor, que
+ * es justo lo único que la página tiene que conseguir que siga.
+ *
+ * LO QUE LO SUSTITUYE
+ * Un solo rig, definido en coordenadas POLARES respecto al sujeto:
+ *
+ *      dist   distancia horizontal al sujeto, en metros
+ *      elev   ángulo de elevación sobre la horizontal, en grados
+ *      azim   ángulo respecto a la dirección de marcha, en grados
+ *
+ * y de ahí sale la posición:
+ *
+ *      x = ancla.x + sin(azim) · dist
+ *      y = ancla.y + tan(elev) · dist
+ *      z = ancla.z + cos(azim) · dist
+ *
+ * El mundo se recorre hacia −Z, así que un `azim` positivo deja la cámara
+ * SIEMPRE por detrás y SIEMPRE al mismo costado. Y ahí está la clave: como
+ * `azim` se mantiene entre 26° y 38° durante todo el recorrido, la cámara no
+ * puede cruzar el eje. No es que se haya tenido cuidado de que no lo cruce: es
+ * que el sistema no sabe cruzarlo. Un giro de 180° sería un `azim` de 210°, y
+ * no hay ninguno.
+ *
+ * Lo mismo con la elevación: `elev` va de 22° a 58°, así que la cámara está
+ * siempre por encima de la acción. Se ve la maqueta desde arriba, que es lo que
+ * el encargo pide, y el horizonte asoma un poco por el fondo sin llegar a
+ * mandar.
+ *
+ * QUÉ SE INTERPOLA
+ * No la posición: los PARÁMETROS. La curva de Hermite pasa por `dist`, `elev`,
+ * `azim` y el punto de mira, y la posición se calcula al final. Eso tiene una
+ * consecuencia que vale oro: entre dos planos la cámara describe un arco
+ * alrededor del sujeto en vez de una recta que lo atraviesa. Interpolar
+ * posiciones es exactamente lo que metía la cámara dentro de las grúas.
+ *
+ * LOS CUATRO MOMENTOS ESPECIALES
+ * El encargo permite unos cuatro, y son éstos, marcados abajo con ★:
+ *
+ *   ★1  apertura   elev 22°, dist 520 — baja y amplia, para presentar el buque
+ *   ★2  enganche   elev 38°, dist 30 — acercamiento moderado en la recogida
+ *   ★3  ruta       elev 58°, dist 70 — seguimiento aéreo alto por carretera
+ *   ★4  entrega    elev 42°, dist 34 — acercamiento suave final
+ *
+ * Todos vuelven después, gradualmente, a la vista principal —elev ~50°—. No
+ * hay cortes: la curva es continua y los parámetros se mueven despacio.
+ *
+ * LA REGLA DE LA VELOCIDAD
+ * «La cámara nunca debe moverse más rápido que el objeto que sigue.» Como el
+ * rig va rígidamente atado al ancla, la cámara hereda la velocidad del sujeto;
+ * lo único que puede añadir es el ritmo al que cambian `dist`, `elev` y
+ * `azim`. Por eso esos tres cambian LENTO, y por eso hay una prueba que mide
+ * la razón entre las dos velocidades a lo largo del recorrido entero.
+ */
+
+/** La vista principal a la que todo vuelve. */
+const AEREA = { elev: 50, azim: 30 };
+
 const PLANOS = {
-  /* CAPÍTULO 1 · ALTA MAR
-     Descenso desde muy arriba hasta el costado del buque. El plano de apertura
-     está lejísimos a propósito: es el único momento del recorrido en el que se
-     ve el barco entero, y hace falta para que todo lo que viene después tenga
-     una escala contra la que medirse. */
+  /* CAPÍTULO 1 · ALTA MAR  ────────────────────────────────── ★1 apertura
+     El único momento de todo el recorrido en el que se ve el buque entero, y
+     hace falta: son 294 metros, y todo lo que viene después se mide contra
+     eso. Baja y amplia, y desde ahí la cámara SUBE hasta la aérea, que es lo
+     que convierte la apertura en un movimiento y no en un plano suelto. */
   oceano: [
-    { t: 0.00, ancla: 'barco', pos: [-210, 430, 360], mira: [40, 18, 0], fov: 36,
-      movil: { pos: [-150, 470, 430], mira: [40, 10, 0], fov: 40 } },
-    { t: 0.45, ancla: 'barco', pos: [-60, 205, 225], mira: [60, 24, 0], fov: 40 },
-    { t: 0.78, ancla: 'barco', pos: [150, 92, 140], mira: [10, 28, 0], fov: 46 },
-    { t: 1.00, ancla: 'barco', pos: [236, 46, 96], mira: [40, 30, 0], fov: 50 },
+    { t: 0.00, ancla: 'barco', dist: 520, elev: 22, azim: 38, miraY: 16, miraZ: -30, fov: 34 },
+    { t: 0.50, ancla: 'barco', dist: 455, elev: 30, azim: 36, miraY: 14, miraZ: -24, fov: 36 },
+    { t: 1.00, ancla: 'barco', dist: 395, elev: 40, azim: 34, miraY: 12, miraZ: -18, fov: 38 },
   ],
 
   /* CAPÍTULO 2 · LLEGADA A PUERTO
-     Se cambia de punto de vista: hasta aquí la cámara viajaba con el buque, y
-     ahora se planta en tierra y deja que el buque venga. Es el mismo recurso
-     que usa cualquier documental para decir «hemos llegado»: se deja de seguir
-     y se espera. */
+     Se sigue subiendo. El buque se acerca al muelle y la cámara pasa de
+     acompañarlo de costado a mirarlo desde arriba: la maniobra de atraque se
+     entiende desde arriba y no se entiende desde ningún otro sitio. */
   puerto: [
-    { t: 0.00, ancla: 'barco', pos: [268, 52, 104], mira: [60, 30, 0], fov: 50 },
-    { t: 0.42, ancla: 'mundo', pos: [205, 96, -12], mira: [40, 40, 96], fov: 44,
-      movil: { pos: [232, 118, -30], mira: [34, 34, 96], fov: 50 } },
-    { t: 0.74, ancla: 'mundo', pos: [150, 62, 6], mira: [20, 30, 92], fov: 46 },
-    { t: 1.00, ancla: 'mundo', pos: [96, 44, 26], mira: [24, 28, 92], fov: 48 },
+    { t: 0.00, ancla: 'barco', dist: 395, elev: 42, azim: 34, miraY: 12, miraZ: -18, fov: 38 },
+    { t: 0.55, ancla: 'barco', dist: 330, elev: 46, azim: 32, miraY: 10, miraZ: -14, fov: 40 },
+    { t: 1.00, ancla: 'barco', dist: 214, elev: 48, azim: 30, miraY: 8, miraZ: -10, fov: 42 },
   ],
 
-  /* CAPÍTULO 3 · DESCARGA
-     ---------------------------------------------------------------------
-     Un plano por cada momento de la operación, y cada uno elegido por lo que
-     tiene que DEJAR CLARO, no por lo vistoso que sea:
-     · el general de salida dice de dónde viene la carga;
-     · el corto sobre los twistlocks dice cómo se agarra;
-     · el contrapicado del despegue dice cuánto pesa;
-     · el perfil del traslado dice cuánto recorre;
-     · y el del apoyo dice dónde acaba.
-     Ninguna posición se repite y no hay dos consecutivas del mismo lado: la
-     cámara cruza el eje en cada corte, que es lo que impide que trece pasos se
-     confundan entre sí.
+  /* CAPÍTULO 3 · DESCARGA  ─────────────────────────────────── ★2 enganche
+     El sujeto pasa a ser el contenedor, que mide doce metros en vez de
+     doscientos noventa y cuatro. La distancia tiene que bajar un orden de
+     magnitud, y por eso este capítulo tiene más planos que ningún otro: no
+     para cambiar de sitio, sino para que ese descenso sea gradual.
 
-     Y todos van APARTADOS de la estructura. El primer intento los puso encima
-     de la carga y la cámara acababa metida entre las celosías de la viga,
-     mirando el pórtico por dentro; el segundo los puso a cincuenta metros y el
-     contenedor quedaba de detalle. Doce metros de contenedor piden entre
-     quince y cuarenta de distancia, y ahí están todos menos el general. */
+     La cámara se mantiene sobre el agua, al costado de la grúa y por encima
+     de la viga. Nunca entra en el pórtico: con `azim` 28–30° y `dist` mínima
+     de 30 m, la cámara queda a 14 m del eje de la grúa por el lado del mar,
+     y las patas están a 7. */
   grua: [
-    // 1 · aproxima — general desde tierra: buque, grúa y carro saliendo
-    { t: 0.000, ancla: 'contenedor', pos: [46, 20, -58], mira: [0, -7, 8], fov: 42,
-      movil: { pos: [58, 26, -74], mira: [0, -10, 8], fov: 48 } },
-    // 2 · bajaVacio — se acerca mientras el spreader baja
-    { t: 0.075, ancla: 'contenedor', pos: [34, 16, -30], mira: [0, 12, 2], fov: 46,
-      movil: { pos: [42, 22, -38], mira: [0, 14, 2], fov: 52 } },
-    // 3 · alinea — al otro lado, cerca, a la altura de la carga
-    { t: 0.175, ancla: 'contenedor', pos: [-19, 7, 16], mira: [0, 6, 0], fov: 48 },
-    // 4/5 · posa y encaja — corto sobre la esquina: aquí se ve el agarre
-    { t: 0.270, ancla: 'contenedor', pos: [8.5, 3.4, 7], mira: [-1, 1.4, 0], fov: 48,
-      movil: { pos: [11, 4.2, 9], mira: [-1, 1.2, 0], fov: 52 } },
-    // 6 · tensa — se aparta un poco: nada se mueve, y eso hay que verlo entero
-    { t: 0.340, ancla: 'contenedor', pos: [-24, 10, -14], mira: [0, 8, 0], fov: 46 },
-    // 7 · despega — contrapicado: es el plano que cuenta las treinta toneladas
-    { t: 0.400, ancla: 'contenedor', pos: [16, -8, 13], mira: [0, 2.5, 0], fov: 46 },
-    // 8 · iza — sube con ella, por delante
-    { t: 0.470, ancla: 'contenedor', pos: [26, 4, -19], mira: [0, 7, 0], fov: 46 },
-    // 9 · traslada — perfil largo contra el buque: el recorrido se mide solo
-    { t: 0.580, ancla: 'contenedor', pos: [-40, 12, -18], mira: [0, 4, 0], fov: 42,
-      movil: { pos: [-50, 20, -24], mira: [0, 2, 0], fov: 48 } },
-    // 10 · frena — de frente y bajo: la carga se viene encima y vuelve
-    { t: 0.715, ancla: 'contenedor', pos: [11, -4, -26], mira: [0, 1, 0], fov: 46 },
-    // 11 · arria — desde arriba, viendo el remolque debajo
-    { t: 0.790, ancla: 'contenedor', pos: [23, 16, 18], mira: [0, -5, 0], fov: 46 },
-    // 12 · asienta — el apoyo, a la altura de la plataforma
-    { t: 0.900, ancla: 'camion', pos: [15, 4.2, 14], mira: [0, 3, 0], fov: 46 },
-    // 13 · suelta — se abre y el spreader se va hacia arriba, fuera de cuadro
-    { t: 1.000, ancla: 'camion', pos: [21, 7.5, 19], mira: [0, 3.6, 0], fov: 46 },
+    /* Seis planos, y ninguno para «cambiar de sitio»: están para que el
+       acercamiento sea GRADUAL. El sujeto pasa de un buque de 294 metros a un
+       contenedor de doce, así que la cámara tiene que cerrarse un orden de
+       magnitud, y hacerlo de golpe en el relevo de ancla se siente como un
+       barrido —medido: la cámara recorría 480 m mientras el buque ya estaba
+       atracado y quieto—. Ahora el cierre se reparte desde alta mar hasta el
+       enganche, y en ningún punto la cámara le gana al sujeto. */
+    { t: 0.00, ancla: 'contenedor', dist: 198, elev: 46, azim: 30, miraY: 4, miraZ: -10, fov: 42 },
+    { t: 0.28, ancla: 'contenedor', dist: 146, elev: 45, azim: 30, miraY: 2, miraZ: -8, fov: 42 },
+    { t: 0.44, ancla: 'contenedor', dist: 86, elev: 36, azim: 29, miraY: 1, miraZ: -5, fov: 43 },
+    /* ★2 · el acercamiento del enganche, TERMINADO antes de que el carro
+       arranque. Si la cámara sigue cerrándose mientras la carga cruza hacia
+       tierra, se suman las dos velocidades y la cámara adelanta al contenedor
+       —1,50× medido—, que es justo lo que el encargo prohíbe. A partir de
+       aquí la distancia se queda quieta y la cámara se limita a acompañar. */
+    { t: 0.56, ancla: 'contenedor', dist: 58, elev: 26, azim: 28, miraY: 0, miraZ: -3, fov: 44 },
+    { t: 0.72, ancla: 'contenedor', dist: 56, elev: 25, azim: 28, miraY: 0, miraZ: -2, fov: 44 },
+    { t: 0.84, ancla: 'contenedor', dist: 54, elev: 27, azim: 28, miraY: 0, miraZ: -3, fov: 44 },
+    { t: 0.93, ancla: 'contenedor', dist: 54, elev: 38, azim: 29, miraY: -1, miraZ: -4, fov: 44 },
+    { t: 1.00, ancla: 'camion', dist: 58, elev: 48, azim: 30, miraY: 3, miraZ: -8, fov: 44 },
   ],
 
   /* CAPÍTULO 4 · ADUANAS
-     El camión avanza hacia el escáner y para. La cámara hace lo contrario de
-     lo que pide el cuerpo: en vez de seguirle, se adelanta y le espera, que es
-     lo que convierte un avance en una LLEGADA. */
+     Ya en la aérea principal, y ahí se queda. El camión avanza, para bajo el
+     escáner y arranca; la cámara no hace nada más que acompañarlo y cerrarse
+     un poco. Que no pase nada con la cámara es el objetivo. */
   aduanas: [
-    { t: 0.00, ancla: 'camion', pos: [21, 8, 22], mira: [0, 3.8, 0], fov: 46 },
-    { t: 0.38, ancla: 'camion', pos: [15, 5.5, -19], mira: [0, 3.6, 6], fov: 44,
-      movil: { pos: [19, 7.5, -25], mira: [0, 3.4, 6], fov: 50 } },
-    { t: 0.68, ancla: 'camion', pos: [-11, 6.8, -16], mira: [0, 3.6, 2], fov: 46 },
-    { t: 1.00, ancla: 'camion', pos: [9, 4.6, -21], mira: [1, 3.8, 3], fov: 44 },
+    { t: 0.00, ancla: 'camion', dist: 62, elev: 48, azim: 30, miraY: 3, miraZ: -8, fov: 44 },
+    { t: 0.50, ancla: 'camion', dist: 52, elev: 50, azim: 30, miraY: 2.5, miraZ: -10, fov: 44 },
+    { t: 1.00, ancla: 'camion', dist: 48, elev: 50, azim: 30, miraY: 2.5, miraZ: -10, fov: 44 },
   ],
 
-  /* CAPÍTULO 5 · SALIDA DEL RECINTO
-     Plano bajo junto a la rueda: es el que cuenta el peso del conjunto, y el
-     único de todo el recorrido a menos de dos metros del suelo. */
+  /* CAPÍTULO 5 · SALIDA DEL RECINTO */
   salida: [
-    { t: 0.00, ancla: 'camion', pos: [7.5, 1.4, -14], mira: [1, 3.2, 3], fov: 46 },
-    { t: 0.45, ancla: 'camion', pos: [-12, 4.2, -18], mira: [0, 3.6, 4], fov: 46 },
-    { t: 1.00, ancla: 'camion', pos: [16, 7, -24], mira: [0, 4, 6], fov: 46 },
+    { t: 0.00, ancla: 'camion', dist: 46, elev: 50, azim: 30, miraY: 2.5, miraZ: -10, fov: 44 },
+    { t: 1.00, ancla: 'camion', dist: 50, elev: 50, azim: 30, miraY: 2.5, miraZ: -14, fov: 44 },
   ],
 
-  /* CAPÍTULO 6 · EN RUTA
-     ---------------------------------------------------------------------
-     Aquí el problema no era el encuadre: era que no se notaba la VELOCIDAD.
-     Un camión a noventa por una recta vacía, filmado desde lejos y de lado, se
-     mueve por la pantalla igual de despacio que uno parado. La velocidad no la
-     da el objeto: la dan las cosas que le pasan cerca a la cámara.
-
-     Así que los planos de este capítulo están todos BAJOS y CERCA, con algo
-     entre la cámara y el horizonte: la rueda, el quitamiedos, el pórtico de
-     señalización, el tablero del paso superior. Lo que entra y sale de cuadro
-     en medio segundo es lo que se lee como noventa por hora. El único plano
-     alto dura poco y está justo para que se respire. */
+  /* CAPÍTULO 6 · EN RUTA  ─────────────────────────────────────── ★3 ruta
+     El seguimiento aéreo alto. Aquí la altura no es un capricho: desde arriba
+     se ve la carretera CORRER por debajo —las marcas viales, el quitamiedos,
+     los pórticos—, y eso cuenta la velocidad mucho mejor que un plano bajo,
+     que además obligaría a la cámara a esquivar mobiliario cada dos segundos.
+     La mirada va muy adelantada, que es lo que dice hacia dónde se va. */
   carretera: [
-    // Sale del ramal y coge la recta
-    /* En vertical este plano se abre y se echa atrás: con el desplazamiento
-       de apaisado, el camión quedaba pegado al borde izquierdo y cortado. */
-    { t: 0.00, ancla: 'camion', pos: [15, 6.4, -27], mira: [0, 4, 5], fov: 46,
-      movil: { pos: [19, 8.5, -33], mira: [0, 4.5, 2], fov: 50 } },
-    // A la altura del buje, rozando el asfalto
-    /* Este plano va MÁS ADENTRO de lo que pide la composición, a propósito.
-       La compensación de pantalla aleja la cámara por el eje de la mirada, y
-       desde 5,2 m de separación eso la sacaba por encima del quitamiedos —que
-       está a 7,4— en cuanto la pantalla era estrecha. Desde 3,4 aguanta el
-       retroceso máximo sin pasarse de la valla. */
-    { t: 0.14, ancla: 'camion', pos: [3.4, 0.9, -1], mira: [1.6, 2.2, 9], fov: 54,
-      movil: { pos: [3.9, 1.1, -2], mira: [1.4, 2.4, 9], fov: 58 } },
-    // Adelantado y bajo, con el quitamiedos barriendo el primer plano
-    { t: 0.30, ancla: 'camion', pos: [-9.5, 1.9, -17], mira: [0, 3.4, 4], fov: 50 },
-    // Persecución pegada, por detrás del semirremolque
-    { t: 0.46, ancla: 'camion', pos: [2.5, 4.6, 21], mira: [0, 3.6, 2], fov: 44 },
-    // El único alto del capítulo, y corto: la ruta desde fuera
-    { t: 0.62, ancla: 'camion', pos: [30, 48, 26], mira: [0, 2, -8], fov: 38,
-      movil: { pos: [38, 62, 34], mira: [0, 0, -8], fov: 44 } },
-    // Vuelve abajo para el paso superior: el tablero cruza sobre la cámara
-    { t: 0.80, ancla: 'camion', pos: [8.5, 2.6, -19], mira: [0, 4.2, 6], fov: 52 },
-    // Y otra vez a la rueda, ya frenando
-    { t: 1.00, ancla: 'camion', pos: [13, 5, -23], mira: [0, 4, 4], fov: 46 },
+    { t: 0.00, ancla: 'camion', dist: 50, elev: 50, azim: 30, miraY: 2.5, miraZ: -16, fov: 44 },
+    { t: 0.35, ancla: 'camion', dist: 46, elev: 50, azim: 28, miraY: 1.5, miraZ: -22, fov: 42 },
+    { t: 0.70, ancla: 'camion', dist: 45, elev: 50, azim: 28, miraY: 1.5, miraZ: -22, fov: 42 },
+    { t: 1.00, ancla: 'camion', dist: 52, elev: 50, azim: 30, miraY: 2.5, miraZ: -18, fov: 44 },
   ],
 
   /* CAPÍTULO 7 · CENTRO LOGÍSTICO
-     Ojo con los planos generales: es tentador plantar la cámara mirando al
-     edificio, pero el camión sigue llegando y se queda fuera de cuadro —o
-     peor, se mete por delante del objetivo—. Medido, uno de estos planos tenía
-     el camión a ciento once grados del eje.
-
-     Van todos anclados al camión con un desplazamiento amplio y con la mirada
-     ADELANTADA hacia donde el camión va: el almacén entra en el encuadre solo,
-     porque el camión va hacia él, y entra creciendo, que es la única forma de
-     que un edificio de ciento sesenta metros se lea como grande. */
+     Se abre para que quepa la nave y se vuelve a cerrar al acercarse al
+     muelle. La nave queda al costado −X del carril, así que el `azim` baja un
+     poco: la cámara se corre hacia el eje y el edificio entra por el lado. */
   centro: [
-    { t: 0.00, ancla: 'camion', pos: [19, 9, -34], mira: [0, 4.5, 10], fov: 46,
-      movil: { pos: [24, 12, -42], mira: [0, 5, 6], fov: 50 } },
-    // Tres cuartos alto: se ve la nave entera por primera vez
-    { t: 0.34, ancla: 'camion', pos: [44, 26, 54], mira: [-10, 0, -46], fov: 42,
-      movil: { pos: [56, 34, 68], mira: [-12, -4, -46], fov: 48 } },
-    // Baja al patio y se mete entre el camión y los muelles de carga
-    { t: 0.66, ancla: 'camion', pos: [-16, 5.5, 12], mira: [2, 3.4, -22], fov: 48 },
-    // Maniobra final de aproximación al muelle asignado
-    { t: 1.00, ancla: 'camion', pos: [17, 8, 22], mira: [0, 4, -8], fov: 46 },
+    { t: 0.00, ancla: 'camion', dist: 54, elev: 50, azim: 30, miraY: 2.5, miraZ: -18, fov: 44 },
+    { t: 0.45, ancla: 'camion', dist: 78, elev: 50, azim: 26, miraY: 0.5, miraZ: -24, fov: 42 },
+    { t: 1.00, ancla: 'camion', dist: 66, elev: 50, azim: 28, miraY: 2.5, miraZ: -14, fov: 44 },
   ],
 
-  /* CAPÍTULO 8 · ENTREGA
-     El pago de todo el recorrido. Va de lo cerca a lo lejos, al revés que los
-     demás capítulos: se abren las puertas en primer plano, y desde ahí la
-     cámara se retira hasta dejar el conjunto —nave, patio, camión— pequeño en
-     el cuadro. Es un final, y un final se mira desde fuera. */
+  /* CAPÍTULO 8 · ENTREGA  ────────────────────────────────────── ★4 entrega
+     El acercamiento final, suave, sobre la maniobra de aparcamiento y las
+     puertas que se abren. Y después la cámara se retira y deja el conjunto
+     pequeño en el cuadro: un final se mira desde fuera. */
   entrega: [
-    { t: 0.00, ancla: 'camion', pos: [17, 8, 24], mira: [0, 4, -6], fov: 46 },
-    /* Las puertas del contenedor, de frente.
-       Va por el lado +X, que es el del patio abierto. En el lado contrario
-       está la fachada de muelles del centro logístico, y al compensar una
-       pantalla estrecha la cámara retrocedía hasta METERSE por una de las
-       puertas de carga: 46 cm de holgura en móvil y 6 en tableta, medido. El
-       encuadre es el mismo; lo que cambia es de qué lado se rodea. */
-    { t: 0.38, ancla: 'camion', pos: [13, 3.6, 15], mira: [2, 3, -2], fov: 48,
-      movil: { pos: [16, 4.4, 19], mira: [2, 3, -2], fov: 52 } },
-    { t: 0.72, ancla: 'camion', pos: [26, 13, -34], mira: [-4, 3, 8], fov: 42 },
-    { t: 1.00, ancla: 'camion', pos: [48, 34, -78], mira: [-8, 0, 14], fov: 40,
-      movil: { pos: [58, 44, -94], mira: [-8, -6, 14], fov: 46 } },
+    { t: 0.00, ancla: 'camion', dist: 62, elev: 50, azim: 28, miraY: 2.5, miraZ: -14, fov: 44 },
+    { t: 0.45, ancla: 'camion', dist: 34, elev: 42, azim: 26, miraY: 2, miraZ: -6, fov: 44 },
+    { t: 0.62, ancla: 'camion', dist: 44, elev: 46, azim: 26, miraY: 2, miraZ: -8, fov: 44 },
+    { t: 1.00, ancla: 'camion', dist: 92, elev: 50, azim: 28, miraY: 0, miraZ: -16, fov: 42 },
   ],
 };
 
-/**
- * Dónde está el anclaje de un plano en un progreso dado.
- *
- * Aquí está la corrección que más falta hacía. Antes los planos se guardaban
- * en coordenadas del mundo, calculadas una vez al arrancar. Eso funciona para
- * lo que no se mueve, pero el camión SIGUE AVANZANDO entre un plano y el
- * siguiente, y la cámara sólo coincidía con él justo en los planos: en medio
- * se separaban decenas de metros y el camión se salía del encuadre. En el
- * capítulo de carretera, sencillamente, no se veía el camión.
- *
- * Ahora cada plano es un DESPLAZAMIENTO respecto a lo que sigue, y el anclaje
- * se evalúa en el progreso ACTUAL. La cámara acompaña exactamente a su
- * objetivo y lo que se interpola es sólo el encuadre.
- */
 function anclajeEn(nombre, p) {
   if (nombre === 'barco') {
     const b = barcoEn(p);
@@ -783,80 +766,64 @@ export function mundoEn(p, ajustes) {
 /**
  * Los planos, enhebrados en UNA lista continua por progreso.
  *
- * Se construyen DOS listas, no una: la ancha y la estrecha. Un móvil en
- * vertical no es un escritorio pequeño, es otra composición. La escena
- * compensa por su cuenta el ángulo y la distancia —eso resuelve que el sujeto
- * quepa—, pero hay planos en los que lo que cambia es la INTENCIÓN: un general
- * que en apaisado enseña el buque de perfil, en vertical tiene que subir y
- * abrirse para que el buque quepa de proa a popa; un contrapicado que en
- * apaisado cabe justo, en vertical necesita separarse.
- *
- * Los planos que no declaran variante usan el mismo en las dos listas, así que
- * sólo se escribe lo que de verdad cambia: doce de treinta y cinco.
+ * Una sola lista, no dos. La versión anterior mantenía una curva aparte para
+ * pantalla estrecha con doce planos escritos a mano; con el rig polar eso
+ * sobra, porque el encuadre vertical se consigue tocando DOS NÚMEROS —acercar
+ * y subir— y esos dos números se derivan, no se escriben. Menos código y,
+ * sobre todo, imposible que las dos curvas se separen al tocar una.
  */
-function enhebrar(estrecho) {
-  const claves = [];
-  for (const tramo of TRAMOS) {
-    const lista = PLANOS[tramo.id];
-    if (!lista) continue;
-    for (const plano of lista) {
-      const v = (estrecho && plano.movil) ? plano.movil : plano;
-      claves.push({
-        p: lerp(tramo.desde, tramo.hasta, plano.t),
-        pos: v.pos, mira: v.mira, fov: v.fov,
-        ancla: plano.ancla || 'mundo',
-      });
-    }
+const CLAVES = [];
+for (const tramo of TRAMOS) {
+  const lista = PLANOS[tramo.id];
+  if (!lista) continue;
+  for (const plano of lista) {
+    CLAVES.push({
+      p: lerp(tramo.desde, tramo.hasta, plano.t),
+      dist: plano.dist,
+      elev: plano.elev,
+      azim: plano.azim,
+      miraY: plano.miraY ?? 0,
+      miraZ: plano.miraZ ?? 0,
+      fov: plano.fov,
+      ancla: plano.ancla || 'mundo',
+    });
   }
-  claves.sort((a, b) => a.p - b.p);
-  return claves;
 }
-
-const CLAVES = enhebrar(false);
-const CLAVES_ESTRECHO = enhebrar(true);
+CLAVES.sort((a, b) => a.p - b.p);
 
 /* Planos coincidentes: el último de un capítulo y el primero del siguiente
    caen en el MISMO punto del recorrido. Si se dejan los dos y no dicen lo
-   mismo, la curva tiene que recorrer esa diferencia en cero progreso, y eso es
-   un corte de cámara —medido, 104 metros de salto—.
+   mismo, la curva tiene que recorrer esa diferencia en cero progreso.
 
-   Cómo se resuelve depende del ANCLAJE:
-
-   · si los dos siguen lo mismo, se funden en uno, que es la intención de los
-     dos a la vez;
-   · si siguen cosas distintas, fundirlos no significa nada: un «46 metros a la
-     derecha» del contenedor y un «96 metros» del origen del mundo no se pueden
-     promediar. Se descarta el SALIENTE y manda el entrante, de modo que el
-     tramo anterior enhebra hasta él y el relevo de anclaje se reparte a lo
-     largo de un tramo con anchura de verdad. */
-function fundirCoincidentes(claves) {
-  for (let i = claves.length - 2; i >= 0; i--) {
-    if (claves[i + 1].p - claves[i].p > 1e-6) continue;
-    const a = claves[i];
-    const b = claves[i + 1];
-    if (a.ancla === b.ancla) {
-      a.pos = a.pos.map((v, k) => (v + b.pos[k]) / 2);
-      a.mira = a.mira.map((v, k) => (v + b.mira[k]) / 2);
-      a.fov = (a.fov + b.fov) / 2;
-      claves.splice(i + 1, 1);
-    } else {
-      claves.splice(i, 1);
+   Con el rig polar esto es mucho menos grave que antes —dos planos
+   coincidentes con el mismo ancla difieren en unos grados, no en cien
+   metros—, pero sigue siendo un pico en la derivada, y la derivada es
+   justamente lo que hay que cuidar. Cuando los dos siguen lo mismo se funden;
+   cuando siguen cosas distintas manda el ENTRANTE, y el relevo de ancla se
+   reparte a lo largo del tramo anterior, que tiene anchura de verdad. */
+for (let i = CLAVES.length - 2; i >= 0; i--) {
+  if (CLAVES[i + 1].p - CLAVES[i].p > 1e-6) continue;
+  const a = CLAVES[i];
+  const b = CLAVES[i + 1];
+  if (a.ancla === b.ancla) {
+    for (const k of ['dist', 'elev', 'azim', 'miraY', 'miraZ', 'fov']) {
+      a[k] = (a[k] + b[k]) / 2;
     }
+    CLAVES.splice(i + 1, 1);
+  } else {
+    CLAVES.splice(i, 1);
   }
-  return claves;
 }
-fundirCoincidentes(CLAVES);
-fundirCoincidentes(CLAVES_ESTRECHO);
 
 /**
  * Hermite cúbico con parametrización NO uniforme.
  *
  * La versión de libro de Catmull-Rom supone que los puntos están
- * equiespaciados. Aquí no lo están ni de lejos —un capítulo tiene siete planos
- * y otro tres—, y tratarlos como si lo estuvieran produce sobreoscilaciones:
- * la cámara se pasa de largo y vuelve. Escalando las tangentes por la
- * separación real de cada tramo, la curva pasa por todos los puntos con la
- * derivada continua, que es justo lo que significa «sin giros bruscos».
+ * equiespaciados. Aquí no lo están ni de lejos —un capítulo tiene seis planos
+ * y otro dos—, y tratarlos como si lo estuvieran produce sobreoscilaciones.
+ * Escalando las tangentes por la separación real de cada tramo, la curva pasa
+ * por todos los puntos con la derivada continua, que es lo que significa «sin
+ * giros bruscos».
  */
 const hermite = (P0, P1, P2, P3, p0, p1, p2, p3, t) => {
   const h = p2 - p1;
@@ -870,20 +837,32 @@ const hermite = (P0, P1, P2, P3, p0, p1, p2, p3, t) => {
     + (t3 - t2) * m2;
 };
 
+const GRADO = Math.PI / 180;
+
 /**
  * Pose de la cámara en un progreso dado. Función pura, sin estado.
- * La amortiguación NO va aquí: va en el bucle, sobre el resultado. Mezclar
- * las dos cosas es lo que hace que una página se desincronice al subir.
+ *
+ * Se interpolan los PARÁMETROS del rig y la posición se calcula al final. Ésa
+ * es toda la diferencia con la versión anterior, y es la que hace que la
+ * cámara describa un arco alrededor del sujeto en vez de una recta que lo
+ * atraviesa. Interpolar posiciones es exactamente lo que metía la cámara
+ * dentro de las grúas y de los edificios.
+ *
+ * La amortiguación NO va aquí: va en el bucle, sobre el resultado. Mezclar las
+ * dos cosas es lo que hace que una página se desincronice al subir.
+ *
+ * @param {number}  p         progreso del recorrido, 0 a 1
+ * @param {object}  salida    objeto reutilizado, para no crear basura
+ * @param {boolean} estrecho  pantalla vertical: encuadre más cerrado y alto
  */
 export function poseEn(p, salida = {}, estrecho = false) {
-  const lista = estrecho ? CLAVES_ESTRECHO : CLAVES;
-  const n = lista.length;
+  const n = CLAVES.length;
   let i = 0;
-  while (i < n - 2 && p > lista[i + 1].p) i++;
-  const c1 = lista[i];
-  const c2 = lista[Math.min(n - 1, i + 1)];
-  const c0 = lista[Math.max(0, i - 1)];
-  const c3 = lista[Math.min(n - 1, i + 2)];
+  while (i < n - 2 && p > CLAVES[i + 1].p) i++;
+  const c1 = CLAVES[i];
+  const c2 = CLAVES[Math.min(n - 1, i + 1)];
+  const c0 = CLAVES[Math.max(0, i - 1)];
+  const c3 = CLAVES[Math.min(n - 1, i + 2)];
   const t = c2.p > c1.p ? clamp((p - c1.p) / (c2.p - c1.p)) : 0;
 
   /* Nada de suavizar el parámetro dentro del tramo. Parece buena idea —«que
@@ -892,25 +871,52 @@ export function poseEn(p, salida = {}, estrecho = false) {
      contrario de un recorrido continuo. La suavidad la da el Hermite, que
      empalma los tramos con la derivada continua; el resto lo pone la
      amortiguación del bucle. */
-  /* El anclaje se evalúa en el progreso ACTUAL, no en el del plano. Cuando
-     dos planos consecutivos siguen cosas distintas —el contenedor y luego el
+  const eje = (k) => hermite(c0[k], c1[k], c2[k], c3[k], c0.p, c1.p, c2.p, c3.p, t);
+
+  let dist = Math.max(4, eje('dist'));
+  let elev = eje('elev');
+  const azim = eje('azim');
+  const miraY = eje('miraY');
+  const miraZ = eje('miraZ');
+  const fov = eje('fov');
+
+  /* Encuadre vertical: más cerca y más alto.
+     Un móvil en vertical no es un escritorio pequeño. Con el rig polar la
+     adaptación es de dos números en vez de doce planos escritos aparte:
+     acercarse un quinto y subir cinco grados centra la acción y quita del
+     cuadro el terreno vacío de los lados, que en vertical es lo que sobra. */
+  if (estrecho) {
+    dist *= 0.82;
+    elev += 5;
+  }
+
+  /* El anclaje se evalúa en el progreso ACTUAL, no en el del plano. Cuando dos
+     planos consecutivos siguen cosas distintas —el contenedor y luego el
      camión— se mezclan los dos anclajes a lo largo del tramo, y como en ese
      momento el contenedor va justo encima del camión, el relevo no se nota. */
   const anclaA = anclajeEn(c1.ancla, p);
   const anclaB = anclajeEn(c2.ancla, p);
+  const ax = lerp(anclaA[0], anclaB[0], t);
+  const ay = lerp(anclaA[1], anclaB[1], t);
+  const az = lerp(anclaA[2], anclaB[2], t);
 
+  /* De polares a mundo. El recorrido va hacia −Z, así que un `azim` positivo
+     deja la cámara por detrás y siempre al mismo costado: no hay forma de que
+     cruce el eje. */
+  const a = azim * GRADO;
   salida.pos = salida.pos || [0, 0, 0];
   salida.mira = salida.mira || [0, 0, 0];
-  for (let k = 0; k < 3; k++) {
-    const ancla = lerp(anclaA[k], anclaB[k], t);
-    salida.pos[k] = ancla + hermite(c0.pos[k], c1.pos[k], c2.pos[k], c3.pos[k],
-      c0.p, c1.p, c2.p, c3.p, t);
-    salida.mira[k] = ancla + hermite(c0.mira[k], c1.mira[k], c2.mira[k], c3.mira[k],
-      c0.p, c1.p, c2.p, c3.p, t);
-  }
-  salida.fov = lerp(c1.fov, c2.fov, t);
+  salida.pos[0] = ax + Math.sin(a) * dist;
+  salida.pos[1] = ay + Math.tan(clamp(elev, 6, 78) * GRADO) * dist;
+  salida.pos[2] = az + Math.cos(a) * dist;
+  salida.mira[0] = ax;
+  salida.mira[1] = ay + miraY;
+  salida.mira[2] = az + miraZ;
+  salida.fov = fov;
+  salida.dist = dist;
+  salida.elev = elev;
+  salida.azim = azim;
   return salida;
 }
 
-/** Cuántos planos tiene el recorrido. Para diagnóstico y pruebas. */
 export const NUM_PLANOS = CLAVES.length;

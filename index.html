@@ -79,7 +79,13 @@
   <nav class="nav__capitulos" aria-label="Capítulos del recorrido">
     <ol id="nav-capitulos"></ol>
   </nav>
-  <a class="boton boton--fino nav__cta" href="#solicitud">Solicitar transporte</a>
+  <!-- El rótulo largo y el corto conviven: en pantalla estrecha se enseña el
+       corto en vez de esconder el botón entero. Un botón que desaparece es
+       peor que un botón pequeño. -->
+  <a class="boton boton--fino nav__cta" href="#solicitud">
+    <span class="nav__cta-largo">Solicitar transporte</span>
+    <span class="nav__cta-corto" aria-hidden="true">Solicitar</span>
+  </a>
 </header>
 
 <div class="controles">
@@ -94,13 +100,30 @@
 </div>
 
 <!-- Panel de seguimiento: los datos del envío, integrados en la escena -->
-<aside class="hud" id="hud" aria-label="Seguimiento del envío">
+<aside class="hud" id="hud" aria-label="Seguimiento del envío" data-abierto>
+  <!-- Se pliega. En un móvil el panel completo se come el texto que hay
+       debajo, así que plegado deja sólo la franja de una línea —código, etapa
+       y estado— y desplegado enseña las cifras del capítulo sin pasar de un
+       cuarto de la pantalla. -->
+  <button type="button" class="hud__conmutar" id="hud-conmutar"
+          aria-expanded="true" aria-controls="hud-cuerpo">
+    <span class="sr">Plegar o desplegar el panel de seguimiento</span>
+    <i aria-hidden="true"></i>
+  </button>
   <p class="hud__codigo"><span>Envío</span><b>NXCU 482019</b></p>
   <!-- Etapa en curso: en móvil es lo único que se enseña, porque es lo único
        que de verdad hace falta saber mientras se lee. -->
   <p class="hud__etapa" id="hud-etapa"><i id="hud-num">01</i><span id="hud-rotulo">Alta mar</span></p>
-  <div class="hud__barra" id="hud-barra" aria-hidden="true"><u></u></div>
-  <dl class="hud__datos" id="hud-datos"></dl>
+  <div class="hud__cuerpo" id="hud-cuerpo">
+    <!-- Un ÚNICO hijo, y es a propósito: el plegado anima
+         `grid-template-rows` de `0fr` a `1fr`, y eso sólo colapsa si la
+         rejilla tiene una fila. Con dos hijos el navegador crea dos filas, el
+         `0fr` se reparte entre ellas y el cuerpo no se cierra nunca. -->
+    <div class="hud__cuerpo-int">
+      <div class="hud__barra" id="hud-barra" aria-hidden="true"><u></u></div>
+      <dl class="hud__datos" id="hud-datos"></dl>
+    </div>
+  </div>
   <p class="hud__estado" id="hud-estado" data-estado="transito">En tránsito</p>
 </aside>
 

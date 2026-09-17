@@ -206,12 +206,58 @@ img, svg { max-width: 100%; display: block; }
 .nav__capitulos a:hover { color: var(--blanco); background: rgba(255, 255, 255, .07); }
 .nav__capitulos a[data-activa] { color: var(--naranja-vivo); background: rgba(226, 112, 31, .14); }
 .nav__capitulos a span { font-variant-numeric: tabular-nums; opacity: .55; margin-right: .35rem; }
+/* EL ENCABEZADO CABE SIEMPRE.
+   El botón de solicitud se cortaba en móvil, y la «solución» que tenía era
+   esconderlo por debajo de 620 px. Las dos cosas están mal: cortado no se lee,
+   y escondido no existe. Ahora la marca puede encogerse, el botón no envuelve
+   nunca y por debajo de 720 px cambia al rótulo corto, que es la misma acción
+   con dos palabras menos. */
+/* El `min-width: 0` va SÓLO en la marca, que es lo que tiene que poder
+   encogerse. Puesto en todos los hijos dejaba que la lista de capítulos se
+   comprimiera por debajo de su contenido: los enlaces seguían existiendo pero
+   los últimos quedaban fuera del recuadro, y pulsar «Entrega» llevaba a
+   «Llegada a puerto». Lo cazó la prueba funcional, que medía un salto a 1980
+   px —el arranque exacto del capítulo 2— en vez de a 14 000. */
+.nav__marca { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; }
+.nav__capitulos { flex: 0 0 auto; }
+.nav__cta { flex: 0 0 auto; white-space: nowrap; }
+.nav__cta-corto { display: none; }
 @media (max-width: 1080px) { .nav__capitulos { display: none; } }
-@media (max-width: 620px) { .nav__cta { display: none; } }
+@media (max-width: 860px) {
+  .nav { gap: .8rem; padding-inline: calc(var(--margen) * .7); }
+  .nav__cta { padding: .5rem .85rem; font-size: .62rem; letter-spacing: .1em; }
+}
+@media (max-width: 720px) {
+  .nav__cta-largo { display: none; }
+  .nav__cta-corto { display: inline; }
+}
+@media (max-width: 400px) {
+  .nav__marca .nav__nombre { font-size: .82rem; letter-spacing: .12em; }
+  .nav__cta { padding: .46rem .7rem; font-size: .58rem; }
+}
 
+/* Los controles, a la IZQUIERDA.
+   Estaban en la misma esquina que el panel de seguimiento —abajo a la
+   derecha— y se tapaban: el panel cubría los dos botones en las cinco
+   pantallas medidas. El panel se queda donde está, porque es donde el texto
+   del capítulo le deja hueco, y los controles se van al lado contrario, que
+   está libre porque la caja de texto va centrada en vertical. */
 .controles {
-  position: fixed; right: var(--margen); bottom: clamp(1rem, 3vw, 1.8rem);
-  z-index: 90; display: flex; flex-direction: column; gap: .5rem; align-items: flex-end;
+  position: fixed; left: var(--margen); bottom: clamp(1rem, 3vw, 1.8rem);
+  z-index: 90; display: flex; flex-direction: column; gap: .5rem; align-items: flex-start;
+}
+/* En pantalla estrecha el panel es una franja pegada al fondo que ocupa todo
+   el ancho, así que los controles suben por encima de ella. */
+@media (max-width: 760px) {
+  .controles {
+    flex-direction: row;
+    bottom: calc(3.6rem + env(safe-area-inset-bottom, 0px));
+    transition: bottom .34s var(--curva);
+  }
+  /* Con el panel desplegado, por encima de él */
+  [data-panel="abierto"] .controles {
+    bottom: calc(25vh + .6rem + env(safe-area-inset-bottom, 0px));
+  }
 }
 .control {
   display: inline-flex; align-items: center; gap: .55rem;
@@ -264,6 +310,9 @@ img, svg { max-width: 100%; display: block; }
 
 .hud {
   position: fixed; right: var(--margen); bottom: clamp(1rem, 3vw, 1.8rem);
+  /* Tope duro: el encargo pide que no pase de un cuarto de pantalla, y se
+     cumple con `max-height`, no confiando en que el contenido sea corto. */
+  max-height: 25vh; overflow: hidden;
   z-index: 88; width: min(288px, 66vw);
   padding: .85rem 1rem 1rem; border-radius: 14px;
   border: 1px solid var(--texto-12);
@@ -273,7 +322,38 @@ img, svg { max-width: 100%; display: block; }
   transition: opacity .6s var(--curva), transform .6s var(--curva);
   pointer-events: none;
 }
-.hud[data-visible] { opacity: 1; transform: none; }
+.hud[data-visible] { opacity: 1; transform: none; pointer-events: auto; }
+
+/* El conmutador. En escritorio es una esquina discreta; en móvil ocupa toda la
+   franja, porque ahí el gesto natural es tocar la barra entera. */
+.hud__conmutar {
+  position: absolute; top: .45rem; right: .5rem;
+  width: 26px; height: 26px; padding: 0;
+  border: 0; border-radius: 7px; background: transparent;
+  color: var(--texto-60); cursor: pointer;
+  display: grid; place-items: center;
+  transition: color .25s, background .25s;
+}
+.hud__conmutar:hover { color: var(--blanco); background: rgba(255, 255, 255, .08); }
+.hud__conmutar i {
+  width: 9px; height: 9px; border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform .3s var(--curva);
+}
+.hud[data-abierto] .hud__conmutar i { transform: rotate(225deg) translate(-2px, -2px); }
+
+/* El cuerpo plegable. Se anima la altura con una rejilla de una fila, que es
+   la única forma de pasar de 0 a «lo que mida» sin fijar un alto a mano. */
+.hud__cuerpo {
+  display: grid; grid-template-rows: 0fr;
+  transition: grid-template-rows .34s var(--curva), opacity .24s;
+  opacity: 0; overflow: hidden;
+}
+.hud[data-abierto] .hud__cuerpo { grid-template-rows: 1fr; opacity: 1; }
+.hud__cuerpo > * { min-height: 0; }
+.hud__cuerpo-int { min-height: 0; overflow: hidden; }
+
 .hud__codigo {
   margin: 0 0 .6rem; display: flex; align-items: baseline; gap: .55rem;
   padding-bottom: .55rem; border-bottom: 1px solid var(--texto-12);
@@ -338,14 +418,36 @@ img, svg { max-width: 100%; display: block; }
 @media (max-width: 760px) {
   .hud {
     left: 0; right: 0; bottom: 0; width: auto;
-    display: flex; align-items: center; gap: .7rem;
-    padding: .5rem var(--margen);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: 'codigo etapa estado' 'cuerpo cuerpo cuerpo';
+    align-items: center; gap: 0 .7rem;
+    padding: .5rem calc(var(--margen) + 2rem) .5rem var(--margen);
     padding-bottom: calc(.5rem + env(safe-area-inset-bottom, 0px));
     border-radius: 0; border-width: 1px 0 0;
-    background: rgba(5, 11, 18, .9);
+    background: rgba(5, 11, 18, .92);
     transform: translateY(100%);
+    max-height: 25vh;
   }
   .hud[data-visible] { transform: none; }
+  .hud__codigo { grid-area: codigo; }
+  .hud__etapa { grid-area: etapa; }
+  .hud__estado { grid-area: estado; }
+  .hud__cuerpo { grid-area: cuerpo; }
+  /* El conmutador ocupa la franja entera menos donde hay texto: en un móvil
+     lo natural es tocar la barra, no buscar una flecha de nueve píxeles. */
+  .hud__conmutar {
+    top: 0; right: 0; bottom: auto; width: 2.4rem; height: 2.6rem;
+    border-radius: 0;
+  }
+  /* Desplegado, las cifras del capítulo aparecen debajo de la franja */
+  .hud[data-abierto] .hud__datos {
+    grid-template-columns: 1fr 1fr; gap: .28rem .9rem;
+    padding-top: .55rem; margin-top: .5rem;
+    border-top: 1px solid var(--texto-12);
+  }
+  .hud[data-abierto] .hud__barra { display: block; margin: .5rem 0 0; }
+  .hud__barra { display: none; }
   .hud__codigo {
     margin: 0; padding: 0; border: 0; flex: none;
     border-right: 1px solid var(--texto-12); padding-right: .7rem;
@@ -354,8 +456,6 @@ img, svg { max-width: 100%; display: block; }
   .hud__codigo b { font-size: .68rem; }
   .hud__etapa { margin: 0; flex: 1 1 auto; min-width: 0; font-size: .66rem; }
   .hud__etapa span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* Las cifras del capítulo las cuenta ya el texto que se está leyendo */
-  .hud__datos, .hud__barra { display: none; }
   .hud__estado {
     margin: 0; padding: 0; border: 0; flex: none;
     font-size: .54rem; letter-spacing: .12em;

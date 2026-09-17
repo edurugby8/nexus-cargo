@@ -243,7 +243,7 @@ un byte en la visita normal.
 ## Pruebas
 
 ```bash
-npm run verificar        # construye y pasa guion + texto + encuadre
+npm run verificar        # construye y pasa guion + texto + responsive + encuadre
 ```
 
 Las tres se sirven su propia copia de `dist/`, así que no hace falta nada más.
@@ -259,6 +259,7 @@ Por separado:
 ```bash
 npm run guion            # el recorrido, en Node, sin navegador  (~0,1 s)
 npm run texto            # desbordes y relevo de texto, 3 pantallas
+npm run responsive       # las cinco pantallas del encargo
 npm run encuadre         # qué se ve de verdad, 3 relaciones de pantalla  (~50 s)
 npm run pruebas          # el recorrido funcional completo
 ```
@@ -292,6 +293,14 @@ sobre la pantalla y mide si está en cuadro, qué fracción ocupa, y a qué
 distancia pasa la cámara de cualquier superficie —seis rayos— para que no se
 meta dentro de la geometría. En tres relaciones de pantalla, porque el fallo de
 móvil era justamente que nadie lo había medido en vertical.
+
+**`responsive.mjs`** recorre 1920×1080, 1366×768, tableta, 390×844 y 360×800 y
+comprueba lo que sólo falla a un ancho concreto y no da ningún aviso: que el
+encabezado quepa con su botón entero y en una línea, que el panel de
+seguimiento no pase del 25 % de la pantalla ni plegado ni desplegado, que se
+pliegue de verdad, que no tape texto ni controles, que no haya desbordamiento
+horizontal y que los botones del final se puedan pulsar —en pantalla, con
+tamaño de dedo y sin nada encima—.
 
 **`texto.mjs`** comprueba que ningún capítulo desborde su caja pegada de una
 altura de ventana, que ninguna línea de titular quede cortada por su propio

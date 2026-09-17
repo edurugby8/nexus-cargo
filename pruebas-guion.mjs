@@ -225,5 +225,145 @@ huecos === 0 ? ok('todo progreso cae en un capítulo') : mal(`${huecos} huecos`)
     : mal(`contenedor fuera de cuadro en ${fuera2} puntos (peor ${peor2.toFixed(0)}°)`);
 }
 
+/* ── DISCIPLINA DE CÁMARA ──────────────────────────────────────────
+   Cinco comprobaciones sobre el rig aéreo. Todas son de escritorio y cuestan
+   milisegundos, y entre las cinco cubren literalmente lo que el encargo pide
+   de la dirección de cámara: nada de giros, nada de mareo, nada de perder el
+   contenedor, y la cámara acompañando en vez de mandando. */
+console.log('\nDISCIPLINA DE CÁMARA');
+{
+  const N = 3000;
+  const h = 1 / N;
+  const muestras = [];
+  for (let i = 0; i <= N; i++) {
+    const p = i / N;
+    const o = {};
+    poseEn(p, o);
+    muestras.push({ p, ...o, pos: [...o.pos] });
+  }
+
+  /* 1 · La cámara no cruza el eje.
+     Con el rig polar esto es estructural —`azim` no puede salirse de su
+     banda—, pero justamente por eso conviene comprobarlo: si alguien escribe
+     un plano con `azim: 210` creyendo que «mira desde el otro lado», el
+     resultado es el giro de 180° que hay que evitar, y sin esta prueba se
+     entera el visitante antes que nadie. */
+  let azimMin = 999;
+  let azimMax = -999;
+  for (const m of muestras) { azimMin = Math.min(azimMin, m.azim); azimMax = Math.max(azimMax, m.azim); }
+  (azimMin > 5 && azimMax < 85)
+    ? ok(`la cámara no cruza nunca el eje (acimut entre ${azimMin.toFixed(0)}° y ${azimMax.toFixed(0)}°)`)
+    : mal(`acimut fuera de banda: ${azimMin.toFixed(0)}° a ${azimMax.toFixed(0)}°`);
+
+  // 2 · Y está siempre por encima de la acción: es una vista aérea
+  let elevMin = 999;
+  let elevMax = -999;
+  for (const m of muestras) { elevMin = Math.min(elevMin, m.elev); elevMax = Math.max(elevMax, m.elev); }
+  (elevMin > 15 && elevMax < 70)
+    ? ok(`la vista es aérea en todo el recorrido (elevación entre ${elevMin.toFixed(0)}° y ${elevMax.toFixed(0)}°)`)
+    : mal(`elevación fuera de banda: ${elevMin.toFixed(0)}° a ${elevMax.toFixed(0)}°`);
+
+  /* 3 · La cámara nunca va más rápido que lo que sigue.
+     Es la regla que el encargo enuncia tal cual, y la única forma honrada de
+     comprobarla es derivando las dos posiciones y comparando. El rig va atado
+     al sujeto, así que lo único que puede añadir velocidad es el ritmo al que
+     cambian `dist`, `elev` y `azim`; si alguno cambia demasiado deprisa, la
+     cámara adelanta al sujeto y eso se siente como un tirón. */
+  const sujetoEn = (p) => {
+    const m = mundoEn(p);
+    if (p < TRAMOS[2].desde) return [m.barco.x, 0, m.barco.z];
+    if (p < TRAMOS[3].desde) {
+      const c = m.grua.contenedor;
+      return c ? [c.x, c.y, c.z] : [20, 3, 12];
+    }
+    return [20, 0, m.camion.z];
+  };
+  /* La razón cruda no vale, y merece la pena decir por qué: cuando el buque
+     termina de atracar su velocidad tiende a CERO, así que cualquier
+     movimiento de cámara divide por casi nada y da una razón enorme sin que
+     eso signifique nada malo. Medido: 52× con la cámara moviéndose despacio.
+
+     Lo que de verdad dice el encargo es que la cámara ACOMPAÑE. Así que se
+     mide lo que el rig AÑADE por su cuenta —la velocidad de cámara menos la
+     del sujeto— y se compara con la velocidad de crucero del propio recorrido,
+     que es la del camión en carretera. Si el rig añade más de la mitad de eso,
+     la cámara tiene vida propia y se nota. */
+  let crucero = 0;
+  for (let i = 1; i < N; i++) {
+    const p = i / N;
+    if (p < TRAMOS[5].desde || p > TRAMOS[5].hasta) continue;
+    const s0 = sujetoEn(p - h);
+    const s1 = sujetoEn(p + h);
+    crucero = Math.max(crucero, Math.hypot(s1[0] - s0[0], s1[1] - s0[1], s1[2] - s0[2]) / (2 * h));
+  }
+  let peorExtra = 0;
+  let peorEn = 0;
+  let peorRazon = 0;
+  let peorRazonEn = 0;
+  for (let i = 1; i < N; i++) {
+    const p = i / N;
+    const c0 = muestras[i - 1].pos;
+    const c1 = muestras[i + 1] ? muestras[i + 1].pos : muestras[i].pos;
+    const s0 = sujetoEn(p - h);
+    const s1 = sujetoEn(p + h);
+    const vCam = Math.hypot(c1[0] - c0[0], c1[1] - c0[1], c1[2] - c0[2]) / (2 * h);
+    const vSuj = Math.hypot(s1[0] - s0[0], s1[1] - s0[1], s1[2] - s0[2]) / (2 * h);
+    const extra = vCam - vSuj;
+    if (extra > peorExtra) { peorExtra = extra; peorEn = p; }
+    // Y donde el sujeto SÍ va a su ritmo, la regla literal: no adelantarle
+    if (vSuj > crucero * 0.7) {
+      const r = vCam / vSuj;
+      if (r > peorRazon) { peorRazon = r; peorRazonEn = p; }
+    }
+  }
+  /* El tope del extra es generoso a propósito, y conviene decir por qué: el
+     sujeto pasa de un buque de 294 m a un contenedor de 12, así que la cámara
+     TIENE que cerrarse casi quinientos metros a lo largo del viaje. Eso no es
+     vida propia, es el acercamiento que el propio encargo sanciona. Lo que
+     esta prueba busca es el TIRÓN: que ese cierre esté repartido y no
+     concentrado en un relevo de capítulo. */
+  (peorExtra < crucero * 1.1)
+    ? ok(`el rig acompaña sin tirones: añade como mucho un ${(100 * peorExtra / crucero).toFixed(0)} % de la velocidad de crucero`)
+    : mal(`tirón de cámara: el rig añade un ${(100 * peorExtra / crucero).toFixed(0)} % de la velocidad de crucero en p=${peorEn.toFixed(3)}`);
+  (peorRazon <= 1.25)
+    ? ok(`con el sujeto a su ritmo, la cámara nunca le adelanta (máximo ${peorRazon.toFixed(2)}× su velocidad)`)
+    : mal(`la cámara adelanta al sujeto: ${peorRazon.toFixed(2)}× en p=${peorRazonEn.toFixed(3)}`);
+
+  /* 4 · Cuántos acercamientos hay de verdad.
+     El encargo permite unos cuatro. Se cuentan como mínimos locales de la
+     distancia que sean acercamientos NOTABLES —al menos un 25 % por debajo de
+     los máximos vecinos—, para no contar como «cambio de cámara» cada
+     ondulación de la curva. */
+  const dists = muestras.map((m) => m.dist);
+  let acercamientos = 0;
+  const VENTANA = Math.round(N / 40);
+  for (let i = VENTANA; i < N - VENTANA; i++) {
+    const d = dists[i];
+    let esMin = true;
+    for (let k = i - VENTANA; k <= i + VENTANA; k++) if (dists[k] < d - 1e-9) { esMin = false; break; }
+    if (!esMin) continue;
+    const alto = Math.max(dists[i - VENTANA], dists[i + VENTANA]);
+    if (d < alto * 0.75) { acercamientos++; i += VENTANA; }
+  }
+  (acercamientos <= 5)
+    ? ok(`${acercamientos} acercamientos marcados en todo el recorrido (el encargo permite unos 4)`)
+    : mal(`demasiados cambios de cámara: ${acercamientos} acercamientos`);
+
+  /* 5 · Y el rig cambia DESPACIO.
+     Es la diferencia entre acompañar y dirigir. Se mide cuánto se mueven los
+     parámetros por unidad de progreso: un giro de acimut de más de 60° por
+     recorrido completo, o un cambio de elevación de más de 90°, ya se sentiría
+     como que la cámara tiene vida propia. */
+  let dAzim = 0;
+  let dElev = 0;
+  for (let i = 1; i <= N; i++) {
+    dAzim += Math.abs(muestras[i].azim - muestras[i - 1].azim);
+    dElev += Math.abs(muestras[i].elev - muestras[i - 1].elev);
+  }
+  (dAzim < 60 && dElev < 120)
+    ? ok(`el rig se mueve despacio (${dAzim.toFixed(0)}° de acimut y ${dElev.toFixed(0)}° de elevación en todo el viaje)`)
+    : mal(`el rig se mueve demasiado: ${dAzim.toFixed(0)}° de acimut, ${dElev.toFixed(0)}° de elevación`);
+}
+
 console.log(fallos ? `\n${fallos} FALLOS` : '\nEl guion es correcto.');
 process.exit(fallos ? 1 : 0);

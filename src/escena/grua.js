@@ -66,7 +66,14 @@ export function crearGrua({ x, activa = false, caps }) {
   const mapa = texturaChapa('#7d8792', 11, 0.6);
   mapa.repeat.set(3, 3);
   const matEstructura = new THREE.MeshStandardMaterial({ map: mapa, roughness: 0.68, metalness: 0.45 });
-  const matAcento = new THREE.MeshStandardMaterial({ color: 0xc85a1e, roughness: 0.62, metalness: 0.3 });
+  /* El acento de la grúa NO es naranja, y es una decisión de legibilidad, no
+     de gusto. El contenedor protagonista es naranja, y con el carro, la casa
+     de máquinas y el spreader del mismo color, en un plano general del puerto
+     había cuatro cosas naranjas y ninguna forma de saber cuál era la que hay
+     que seguir. Ahora el naranja es exclusivo del NXCU 482019: en todo el
+     recorrido no hay otra cosa de ese color, así que localizarlo es
+     instantáneo aunque la cámara esté a doscientos metros. */
+  const matAcento = new THREE.MeshStandardMaterial({ color: 0x2f6f86, roughness: 0.6, metalness: 0.35 });
   const matOscuro = new THREE.MeshStandardMaterial({ color: 0x232a33, roughness: 0.5, metalness: 0.7 });
   aDesechar.push(mapa, matEstructura, matAcento, matOscuro);
 
