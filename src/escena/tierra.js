@@ -605,10 +605,15 @@ export function crearCentro({ caps }) {
   const xNave = X - 70;
 
   /* ── Explanada ─────────────────────────────────────────────────── */
-  const geoExplanada = new THREE.PlaneGeometry(300, 300);
+  /* La explanada es un VOLUMEN, no un plano.
+     Era un plano a cota 0,03 y el terreno de alrededor está a −1,15: un metro
+     y veinte de escalón sin canto, así que desde el aire el recinto entero
+     flotaba como una losa recortada sobre el campo. Una plataforma logística
+     va en terraplén y se ve el talud; con el canto modelado deja de flotar y,
+     de paso, explica por qué está a la misma cota que la carretera. */
+  const geoExplanada = new THREE.BoxGeometry(300, 1.4, 300);
   const explanada = new THREE.Mesh(geoExplanada, matSuelo);
-  explanada.rotation.x = -Math.PI / 2;
-  explanada.position.set(X - 20, 0.03, Z - 40);
+  explanada.position.set(X - 20, 0.03 - 0.7, Z - 40);
   explanada.receiveShadow = true;
   explanada.userData.envolvente = true;
   grupo.add(explanada);
@@ -945,10 +950,10 @@ export function crearDestino() {
 
   const zFachada = Z - 40;
 
-  const geoSuelo = new THREE.PlaneGeometry(180, 200);
+  // Mismo terraplén que en el centro logístico, por la misma razón
+  const geoSuelo = new THREE.BoxGeometry(180, 1.4, 200);
   const suelo = new THREE.Mesh(geoSuelo, matSuelo);
-  suelo.rotation.x = -Math.PI / 2;
-  suelo.position.set(X, 0.03, Z - 36);
+  suelo.position.set(X, 0.03 - 0.7, Z - 36);
   suelo.receiveShadow = true;
   suelo.userData.envolvente = true;
   grupo.add(suelo);
