@@ -12,8 +12,9 @@
     "encuadre": "node pruebas-encuadre.mjs",
     "texto": "node texto.mjs",
     "pruebas": "node pruebas.mjs",
-    "verificar": "npm run build && npm run guion && npm run texto && npm run responsive && npm run encuadre",
-    "responsive": "node responsive.mjs"
+    "verificar": "npm run build && npm run guion && npm run texto && npm run responsive && npm run limpieza && npm run encuadre",
+    "responsive": "node responsive.mjs",
+    "limpieza": "node limpieza.mjs"
   },
   "dependencies": {
     "gsap": "3.12.5",

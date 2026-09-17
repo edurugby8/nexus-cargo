@@ -131,17 +131,34 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
      Un mundo de kilómetro y medio no se paga entero en cada fotograma. Cada
      región declara en qué tramo del recorrido puede verse, con holgura por los
      dos lados para que nada aparezca de golpe delante del objetivo. */
+  /* El corte del puerto va justo ANTES de que empiece la carretera, no en el
+     límite ni después.
+
+     Parece una minucia y no lo es. El puerto se apagaba con `<= hasta` y
+     `hasta` valía exactamente el comienzo de «En ruta», así que en el primer
+     instante del capítulo la explanada seguía encendida; y la zona de aduanas
+     se apagaba CINCO CENTÉSIMAS más tarde, ya bien entrada la carretera. Con
+     la cámara a ras eso no se veía; con la cámara aérea, que mira lejos, sí:
+     medido, la explanada asomaba a 351 m y el arco de aduanas a 93 m con el
+     camión ya en ruta. El capítulo que trata de haber dejado el puerto atrás
+     estaba enseñando el puerto.
+
+     La centésima de margen es lo que hace el corte exclusivo. Y no deja un
+     hueco: el terreno de la carretera arranca en z −106, seis metros antes de
+     la barrera, así que cuando el puerto se apaga ya hay suelo debajo. */
+  const finPuerto = inicioDe('carretera') - 0.001;
   const regiones = [
     { obj: barco, desde: -1, hasta: inicioDe('aduanas') + 0.1 },
-    { obj: mar, desde: -1, hasta: inicioDe('carretera') },
-    { obj: puerto, desde: -1, hasta: inicioDe('carretera') },
-    { obj: aduanas, desde: inicioDe('grua') - 0.06, hasta: inicioDe('carretera') + 0.05 },
+    { obj: mar, desde: -1, hasta: finPuerto },
+    { obj: puerto, desde: -1, hasta: finPuerto },
+    { obj: aduanas, desde: inicioDe('grua') - 0.06, hasta: finPuerto },
     { obj: carretera, desde: inicioDe('aduanas') - 0.04, hasta: 1.1 },
     { obj: centro, desde: inicioDe('carretera') - 0.02, hasta: 1.1 },
     { obj: destino, desde: inicioDe('centro') - 0.02, hasta: 1.1 },
   ];
   for (const g of gruas) {
-    regiones.push({ obj: g, desde: -1, hasta: inicioDe('salida') + 0.06 });
+    // Las grúas miden 82 m: se ven desde mucho más lejos que el resto
+    regiones.push({ obj: g, desde: -1, hasta: inicioDe('salida') + 0.04 });
   }
 
   /* ── Estado del bucle ─────────────────────────────────────────── */
@@ -542,6 +559,7 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   if (window.__debugNX) {
     window.__escenaNX = {
       THREE, escena, camara, renderer, barco, gruas, camion, heroe, st, AJUSTES, MEDIDAS,
+      puerto, aduanas, carretera, centro, destino, mar, tramos: TRAMOS,
       get fotogramas() { return fotogramas; },
       get freno() { return { escalon, medioFotograma: Math.round(medioFotograma) }; },
       mundo: () => mundoEn(st.progreso, AJUSTES),
