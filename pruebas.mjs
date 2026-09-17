@@ -77,11 +77,18 @@ async function irA(p, progreso) {
 console.log('ESCRITORIO');
 {
   const p = await abrir();
-  const carga = await p.evaluate(() => {
+  /* Se ESPERA A LA CONDICIÓN, no se comprueba al vuelo.
+     La pantalla de carga se retira encadenando el primer fotograma pintado con
+     una transición de opacidad, y eso son varias décimas. Comprobarlo justo
+     después de contar cinco fotogramas medía en realidad si el equipo iba
+     rápido: con la escena más cargada de esta fase, el primer fotograma llega
+     más tarde y la comprobación empezó a fallar sin que hubiera nada roto.
+     Es la misma regla que el resto del archivo ya seguía. */
+  const carga = await p.waitForFunction(() => {
     const c = document.getElementById('carga');
     return !c || (c.hasAttribute('data-listo') && getComputedStyle(c).visibility === 'hidden');
-  });
-  carga ? ok('la pantalla de carga se retira sola') : fallo('carga', 'sigue puesta');
+  }, null, { timeout: 15000, polling: 100 }).then(() => true).catch(() => false);
+  carga ? ok('la pantalla de carga se retira sola') : fallo('carga', 'sigue puesta a los 15 s');
 
   const e = await p.evaluate(() => ({
     montada: !!window.__escenaNX,

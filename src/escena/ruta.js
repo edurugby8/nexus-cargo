@@ -502,9 +502,9 @@ const MOMENTOS = [
   [0.3908, 0x2f5f95, 0xc6ced3, 0.00086, 0xfff6e4, 2.20, 0.54,  0.06, 0.42, 1.50, 1.02],  // 4 aduanas
   [0.5057, 0x36699f, 0xccd6de, 0.00100, 0xfffaf0, 2.30, 0.62,  0.30, 0.40, 1.55, 1.00],  // 5 salida
   [0.5977, 0x3a70ac, 0xcdd7df, 0.00108, 0xfff8ea, 2.25, 0.58,  0.58, 0.44, 1.55, 0.99],  // 6 en ruta
-  [0.7586, 0x2f5b8c, 0xc0ae96, 0.00072, 0xffdfae, 1.95, 0.34,  0.92, 0.58, 1.60, 1.06],  // 7 centro
-  [0.8851, 0x223d5c, 0xb59477, 0.00058, 0xffc089, 1.70, 0.20,  1.16, 0.66, 1.65, 1.12],  // 8 entrega
-  [1.0000, 0x142640, 0x8f6a52, 0.00072, 0xff9e5c, 1.30, 0.11,  1.34, 0.72, 1.70, 1.18],  // cierre
+  [0.7586, 0x35659a, 0xc6b49c, 0.00072, 0xffe3b6, 2.05, 0.38,  0.92, 0.62, 1.85, 1.10],  // 7 centro
+  [0.8851, 0x3c5f85, 0xc5a68a, 0.00058, 0xffcb96, 1.95, 0.26,  1.16, 0.74, 2.15, 1.26],  // 8 entrega
+  [1.0000, 0x2d4a70, 0xa8866c, 0.00072, 0xffab6d, 1.55, 0.17,  1.34, 0.82, 2.45, 1.42],  // cierre
 ];
 
 const mezclaHex = (a, b, t) => {
@@ -668,7 +668,10 @@ const PLANOS = {
      alto dura poco y está justo para que se respire. */
   carretera: [
     // Sale del ramal y coge la recta
-    { t: 0.00, ancla: 'camion', pos: [15, 6.4, -27], mira: [0, 4, 5], fov: 46 },
+    /* En vertical este plano se abre y se echa atrás: con el desplazamiento
+       de apaisado, el camión quedaba pegado al borde izquierdo y cortado. */
+    { t: 0.00, ancla: 'camion', pos: [15, 6.4, -27], mira: [0, 4, 5], fov: 46,
+      movil: { pos: [19, 8.5, -33], mira: [0, 4.5, 2], fov: 50 } },
     // A la altura del buje, rozando el asfalto
     /* Este plano va MÁS ADENTRO de lo que pide la composición, a propósito.
        La compensación de pantalla aleja la cámara por el eje de la mirada, y
@@ -701,7 +704,8 @@ const PLANOS = {
      porque el camión va hacia él, y entra creciendo, que es la única forma de
      que un edificio de ciento sesenta metros se lea como grande. */
   centro: [
-    { t: 0.00, ancla: 'camion', pos: [19, 9, -34], mira: [0, 4.5, 10], fov: 46 },
+    { t: 0.00, ancla: 'camion', pos: [19, 9, -34], mira: [0, 4.5, 10], fov: 46,
+      movil: { pos: [24, 12, -42], mira: [0, 5, 6], fov: 50 } },
     // Tres cuartos alto: se ve la nave entera por primera vez
     { t: 0.34, ancla: 'camion', pos: [44, 26, 54], mira: [-10, 0, -46], fov: 42,
       movil: { pos: [56, 34, 68], mira: [-12, -4, -46], fov: 48 } },
@@ -718,9 +722,14 @@ const PLANOS = {
      el cuadro. Es un final, y un final se mira desde fuera. */
   entrega: [
     { t: 0.00, ancla: 'camion', pos: [17, 8, 24], mira: [0, 4, -6], fov: 46 },
-    // Las puertas del contenedor, de frente
-    { t: 0.38, ancla: 'camion', pos: [-13, 3.6, 15], mira: [-2, 3, -2], fov: 48,
-      movil: { pos: [-16, 4.4, 19], mira: [-2, 3, -2], fov: 52 } },
+    /* Las puertas del contenedor, de frente.
+       Va por el lado +X, que es el del patio abierto. En el lado contrario
+       está la fachada de muelles del centro logístico, y al compensar una
+       pantalla estrecha la cámara retrocedía hasta METERSE por una de las
+       puertas de carga: 46 cm de holgura en móvil y 6 en tableta, medido. El
+       encuadre es el mismo; lo que cambia es de qué lado se rodea. */
+    { t: 0.38, ancla: 'camion', pos: [13, 3.6, 15], mira: [2, 3, -2], fov: 48,
+      movil: { pos: [16, 4.4, 19], mira: [2, 3, -2], fov: 52 } },
     { t: 0.72, ancla: 'camion', pos: [26, 13, -34], mira: [-4, 3, 8], fov: 42 },
     { t: 1.00, ancla: 'camion', pos: [48, 34, -78], mira: [-8, 0, 14], fov: 40,
       movil: { pos: [58, 44, -94], mira: [-8, -6, 14], fov: 46 } },

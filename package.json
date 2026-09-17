@@ -12,7 +12,7 @@
     "encuadre": "node pruebas-encuadre.mjs",
     "texto": "node texto.mjs",
     "pruebas": "node pruebas.mjs",
-    "verificar": "npm run build && npm run guion && npm run texto && npm run encuadre && npm run pruebas"
+    "verificar": "npm run build && npm run guion && npm run texto && npm run encuadre"
   },
   "dependencies": {
     "gsap": "3.12.5",

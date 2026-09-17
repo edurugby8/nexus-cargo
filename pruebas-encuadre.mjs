@@ -69,8 +69,16 @@ const SUJETOS = {
   entrega:   { que: 'camion',     min: 0.04, max: 2.20, tapado: true },
 };
 
-/** Distancia mínima aceptable de la cámara a cualquier superficie. */
-const HOLGURA = 1.2;
+/**
+ * Distancia mínima aceptable de la cámara a un OBSTÁCULO.
+ *
+ * No a cualquier superficie: el suelo no cuenta, y el propio sujeto tampoco.
+ * Hay planos que pasan a menos de un metro del costado del camión o rozando el
+ * asfalto, y están puestos a propósito —son los que cuentan la velocidad—. Lo
+ * que esto busca es que la cámara no se meta DENTRO de algo: una pata de grúa,
+ * un quitamiedos, una pila de contenedores.
+ */
+const HOLGURA = 0.55;
 
 function servir() {
   const s = createServer(async (req, res) => {
@@ -97,7 +105,7 @@ const SONDA = () => {
   const THREE = window.__escenaNX.THREE;
   const e = window.__escenaNX;
 
-  window.__sonda = (progreso) => {
+  window.__sonda = (progreso, sujeto) => {
     e.irA(progreso);
     const cam = e.camara;
     cam.updateMatrixWorld(true);
@@ -141,11 +149,22 @@ const SONDA = () => {
        el mar, que son superficies envolventes y siempre «rodean» a la cámara
        sin que eso signifique nada. */
     const rayo = new THREE.Raycaster();
-    rayo.far = 40;
+    rayo.far = 25;
+    /* El sujeto que sigue el capítulo NO es un obstáculo: hay planos que le
+       pasan a un metro del costado a propósito, que son justamente los que
+       cuentan el peso y la velocidad. Y los suelos tampoco: van marcados como
+       envolventes en su módulo, igual que el mar y el domo del cielo. */
+    const propio = new Set();
+    if (sujeto && e[sujeto]) e[sujeto].traverse((o) => propio.add(o));
     const solidos = [];
     e.escena.traverse((o) => {
       if (!o.isMesh || !o.visible) return;
-      if (o.userData.envolvente) return;
+      if (o.userData.envolvente || propio.has(o)) return;
+      // Lo que está lejos no puede tocar un rayo de 25 m: descartarlo aquí
+      // evita proyectar centenares de mallas en cada muestra.
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      v.setFromMatrixPosition(o.matrixWorld);
+      if (v.distanceTo(cam.position) > 25 + o.geometry.boundingSphere.radius * 3) return;
       let padre = o;
       let oculto = false;
       while (padre) { if (!padre.visible) oculto = true; padre = padre.parent; }
@@ -158,7 +177,14 @@ const SONDA = () => {
       const golpes = rayo.intersectObjects(solidos, false);
       if (golpes.length && golpes[0].distance < holgura) {
         holgura = golpes[0].distance;
-        quien = golpes[0].object.name || golpes[0].object.type;
+        /* El fallo tiene que decir CONTRA QUÉ y DÓNDE, o no sirve de nada:
+           buscar a mano un obstáculo de siete metros en un mundo de kilómetro
+           y medio es lo que convierte una prueba útil en una molestia. */
+        const o = golpes[0].object;
+        const pos = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
+        quien = `${o.name || o.type} de radio ${Math.round(o.geometry.boundingSphere?.radius || 0)} m`
+          + ` en (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)}),`
+          + ` cámara en (${cam.position.x.toFixed(0)}, ${cam.position.y.toFixed(0)}, ${cam.position.z.toFixed(0)})`;
       }
     }
 
@@ -199,19 +225,20 @@ async function medirPantalla(navegador, nombre, viewport) {
   const fuera = {};
   for (let i = 0; i <= MUESTRAS; i++) {
     const p = i / MUESTRAS;
-    const r = await pag.evaluate((p) => window.__sonda(p), p);
+    const cap0 = await pag.evaluate((p) => window.__escenaNX.capituloDe(p), p);
+    const r = await pag.evaluate(([p, s]) => window.__sonda(p, s), [p, SUJETOS[cap0]?.que || null]);
     const cap = r.capitulo;
     const def = SUJETOS[cap];
     if (!def) continue;
     const s = r.sujetos[def.que];
     if (!s) continue;
 
-    peor[cap] = peor[cap] || { min: 9, max: 0, holgura: 999, muestras: 0 };
+    peor[cap] = peor[cap] || { min: 9, max: 0, holgura: 999, muestras: 0, quien: null, donde: 0 };
     const acc = peor[cap];
     acc.muestras++;
     acc.min = Math.min(acc.min, s.cobertura);
     acc.max = Math.max(acc.max, s.cobertura);
-    acc.holgura = Math.min(acc.holgura, r.holgura);
+    if (r.holgura < acc.holgura) { acc.holgura = r.holgura; acc.quien = r.quien; acc.donde = p; }
     if (!s.solapa) {
       fuera[cap] = fuera[cap] || [];
       fuera[cap].push(p.toFixed(3));
@@ -233,7 +260,7 @@ async function medirPantalla(navegador, nombre, viewport) {
       ok(`${etiqueta}: cobertura ${(a.min * 100).toFixed(0)}–${(a.max * 100).toFixed(0)} %`);
     }
     if (a.holgura < HOLGURA) {
-      mal(`${etiqueta}: la cámara pasa a ${a.holgura.toFixed(2)} m de una superficie (mínimo ${HOLGURA} m)`);
+      mal(`${etiqueta}: la cámara pasa a ${a.holgura.toFixed(2)} m de «${a.quien}» en p=${a.donde.toFixed(3)} (mínimo ${HOLGURA} m)`);
     } else {
       ok(`${etiqueta}: la cámara nunca baja de ${a.holgura === 999 ? '∞' : a.holgura.toFixed(1)} m de holgura`);
     }

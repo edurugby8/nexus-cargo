@@ -36,8 +36,13 @@ export const AJUSTES = {
      pantalla alta y estrecha recorta el encuadre por los lados. Estos dos
      topes gobiernan cuánto se ensancha el ángulo y cuánto se retrocede para
      recuperarlo; subir el primero deforma, subir el segundo aleja. */
-  fovMaximo: 64,
-  retrocesoMaximo: 2.1,
+  /* El reparto entre los dos importa. Con el tope de ángulo bajo y el
+     retroceso alto —64° y ×2,1— en un móvil el sujeto quedaba lejísimos: el
+     camión ocupaba un tercio del alto y el resto era suelo. Se prefiere
+     ensanchar el ángulo y retroceder menos: se pierde algo de campo lateral
+     respecto al escritorio, pero el sujeto se ve. */
+  fovMaximo: 72,
+  retrocesoMaximo: 1.55,
   niebla: 1,             // bruma atmosférica: es lo que da la escala
   luz: 1,                // intensidad de todas las luces a la vez
   exposicion: 1,         // diafragma del revelado
@@ -66,19 +71,19 @@ export const CONFIGURACIONES = {
   cinematografica: {
     velocidad: 0.85, movimiento: 1.25, oleaje: 1.15, balanceo: 1.3, reflejos: 1,
     velocidadGrua: 0.8, oscilacion: 1.35, velocidadCamion: 0.9, suspension: 1.2,
-    trafico: 0.8, distanciaCamara: 1.15, fovMaximo: 62, retrocesoMaximo: 2.1, niebla: 1.35, luz: 0.95, exposicion: 1.08,
+    trafico: 0.8, distanciaCamara: 1.15, fovMaximo: 70, retrocesoMaximo: 1.6, niebla: 1.35, luz: 0.95, exposicion: 1.08,
     particulas: 1.2, detalle: 1, giroSol: 1.25, rebote: 1.1, relleno: 1.2,
   },
   rendimiento: {
     velocidad: 1, movimiento: 0.8, oleaje: 0.7, balanceo: 0.7, reflejos: 0.35,
     velocidadGrua: 1.1, oscilacion: 0.7, velocidadCamion: 1.1, suspension: 0.7,
-    trafico: 0.35, distanciaCamara: 1, fovMaximo: 68, retrocesoMaximo: 1.7, niebla: 0.8, luz: 1, exposicion: 1,
+    trafico: 0.35, distanciaCamara: 1, fovMaximo: 74, retrocesoMaximo: 1.4, niebla: 0.8, luz: 1, exposicion: 1,
     particulas: 0.3, detalle: 0.45, giroSol: 0.8, rebote: 1, relleno: 0.7,
   },
   presentacion: {
     velocidad: 1.35, movimiento: 1.1, oleaje: 1, balanceo: 1, reflejos: 0.9,
     velocidadGrua: 1.4, oscilacion: 1, velocidadCamion: 1.35, suspension: 1,
-    trafico: 1.2, distanciaCamara: 0.92, fovMaximo: 64, retrocesoMaximo: 2.1, niebla: 1, luz: 1.08, exposicion: 1.04,
+    trafico: 1.2, distanciaCamara: 0.92, fovMaximo: 72, retrocesoMaximo: 1.55, niebla: 1, luz: 1.08, exposicion: 1.04,
     particulas: 1.1, detalle: 1.15, giroSol: 1, rebote: 1.08, relleno: 1,
   },
 };

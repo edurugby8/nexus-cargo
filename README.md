@@ -243,15 +243,23 @@ un byte en la visita normal.
 ## Pruebas
 
 ```bash
-npm run verificar        # construye y pasa las cuatro suites
+npm run verificar        # construye y pasa guion + texto + encuadre
 ```
 
-o por separado:
+Las tres se sirven su propia copia de `dist/`, así que no hace falta nada más.
+La funcional sí necesita el servidor de vista previa, y por eso va aparte:
+
+```bash
+npm run preview          # en una terminal
+npm run pruebas          # en otra
+```
+
+Por separado:
 
 ```bash
 npm run guion            # el recorrido, en Node, sin navegador  (~0,1 s)
 npm run texto            # desbordes y relevo de texto, 3 pantallas
-npm run encuadre         # qué se ve de verdad, 3 relaciones de pantalla
+npm run encuadre         # qué se ve de verdad, 3 relaciones de pantalla  (~50 s)
 npm run pruebas          # el recorrido funcional completo
 ```
 

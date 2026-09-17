@@ -282,9 +282,25 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   redimensionar();
   window.addEventListener('resize', redimensionar);
 
+  /* El bucle está partido en dos a propósito.
+
+     `fotograma()` es el que se encadena con `requestAnimationFrame`;
+     `pintar()` es el trabajo. Estaban juntos, y eso tenía una consecuencia
+     fea: la sonda de depuración llamaba a `fotograma()` para situar la escena
+     en un punto exacto, y cada llamada ENCOLABA un rAF más. Tras doscientas
+     muestras había doscientos bucles concurrentes pintando la escena entera, y
+     la prueba de encuadre pasaba de tres minutos a más de veinticinco. El
+     coste crecía con el cuadrado de las muestras.
+
+     Partirlo cuesta dos líneas y deja la sonda pintando exactamente un
+     fotograma, que es lo que decía que hacía. */
   function fotograma() {
     raf = requestAnimationFrame(fotograma);
     if (!corriendo) return;
+    pintar();
+  }
+
+  function pintar() {
 
     /* Un solo reloj y el delta acotado por los DOS lados. Con un delta
        negativo —que sale de mezclar el sello de requestAnimationFrame con
@@ -346,6 +362,23 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
        donde hay suelo: en alta mar y en el traslado de la grúa la cámara va a
        decenas de metros de altura y esto no la toca nunca. */
     if (objetivoPos.y < ALTURA_MINIMA) objetivoPos.y = ALTURA_MINIMA;
+
+    /* ENCUADRE EN VERTICAL.
+       Ensanchar el ángulo para recuperar lo que una pantalla alta recorta por
+       los lados tiene un efecto secundario: el campo extra se reparte por
+       igual arriba y abajo, y abajo no hay nada que ver. En el capítulo de
+       carretera casi la mitad del cuadro se iba en terreno vacío mientras el
+       camión quedaba pequeño en el tercio superior.
+
+       Se corrige inclinando la cámara hacia arriba en proporción a lo que se
+       haya ensanchado: el horizonte baja, entra cielo en vez de suelo y el
+       sujeto queda donde tiene que quedar. Es lo que hace cualquiera con una
+       cámara en la mano al girar el móvil, y no hace falta escribir treinta y
+       cinco planos más para conseguirlo. */
+    if (enc.fov > pose.fov + 0.5) {
+      const abierto = (enc.fov - pose.fov) / Math.max(1, AJUSTES.fovMaximo - pose.fov);
+      objetivoMira.y += objetivoPos.distanceTo(objetivoMira) * 0.16 * abierto;
+    }
 
     // Entrada: la cámara llega desde más arriba y más lejos al arrancar
     if (inicioEntrada > 0) {
@@ -430,6 +463,7 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
     puerto.userData.actualizar?.(mundo);
     aduanas.userData.actualizar?.(mundo);
     centro.userData.actualizar?.(mundo, reloj);
+    destino.userData.actualizar?.(mundo, reloj);
     ambiental.userData.actualizar?.(mundo, reloj, AJUSTES, freno, camara);
 
     /* ── El contenedor protagonista ─────────────────────────────────
@@ -519,7 +553,7 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
       irA(p) {
         forzado = clamp(p);
         anterior = performance.now() - 16;
-        fotograma();
+        pintar();
         forzado = null;
       },
     };
