@@ -78,10 +78,13 @@ export function montarHud() {
   const hud = document.getElementById('hud');
   const datos = document.getElementById('hud-datos');
   const estado = document.getElementById('hud-estado');
+  const num = document.getElementById('hud-num');
+  const rotulo = document.getElementById('hud-rotulo');
+  const barra = document.getElementById('hud-barra');
   if (!hud || !datos) return () => {};
   let ultimo = null;
 
-  return (id, mundo) => {
+  return (id, mundo, local = 0) => {
     const cap = CAPITULOS.find((c) => c.id === id);
     if (id !== ultimo) {
       ultimo = id;
@@ -92,16 +95,46 @@ export function montarHud() {
       ];
       datos.innerHTML = filas.map(([k, v, e]) => `
         <div><dt>${k}</dt><dd${e ? ' data-estado="ok"' : ''}>${v}</dd></div>`).join('');
+      if (num) num.textContent = cap?.numero || '01';
+      if (rotulo) rotulo.textContent = cap?.rotulo || '';
       // En la portada no se enseña: todavía no se está siguiendo nada
       hud.toggleAttribute('data-visible', id !== 'oceano');
     }
+    // El avance dentro del capítulo, cada fotograma: es barato y no parpadea
+    barra?.style.setProperty('--local', local.toFixed(3));
     if (estado && mundo) {
+      /* El estado cuenta lo que está pasando AHORA, no lo que pone en la
+         ficha. Durante la descarga eso es el paso de la grúa en curso: es el
+         hilo que permite seguir trece pasos sin perderse, y el único sitio de
+         la página donde se nombran. */
       const entregado = mundo.camion.entregado;
-      estado.textContent = entregado ? 'Entrega confirmada' : (cap?.servicio || 'En tránsito');
+      const paso = id === 'grua' ? PASO_LEGIBLE[mundo.grua.fase] : null;
+      estado.textContent = entregado
+        ? 'Entrega confirmada'
+        : (paso || cap?.servicio || 'En tránsito');
       estado.dataset.estado = entregado ? 'entregado' : 'transito';
     }
   };
 }
+
+/** Los trece pasos de la descarga, dichos como los diría un operador. */
+const PASO_LEGIBLE = {
+  espera: 'Grúa en espera',
+  aproxima: 'Carro sobre el buque',
+  bajaVacio: 'Spreader descendiendo',
+  alinea: 'Alineando sobre la carga',
+  posa: 'Contacto',
+  encaja: 'Cerrando twistlocks',
+  tensa: 'Tensando cables',
+  despega: 'Despegando de la pila',
+  iza: 'Izando',
+  traslada: 'Traslado a tierra',
+  frena: 'Frenando el carro',
+  arria: 'Arriando sobre el remolque',
+  asienta: 'Asentando la carga',
+  suelta: 'Liberando twistlocks',
+  hecho: 'Descarga completada',
+};
 
 /**
  * Revelados.

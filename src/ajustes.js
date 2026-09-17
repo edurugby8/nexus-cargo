@@ -32,11 +32,27 @@ export const AJUSTES = {
 
   /* ── Cámara y aire ──────────────────────────────────────────────── */
   distanciaCamara: 1,    // <1 acerca la cámara · >1 la echa atrás
+  /* Compensación de pantalla. El `fov` de three.js es VERTICAL, así que una
+     pantalla alta y estrecha recorta el encuadre por los lados. Estos dos
+     topes gobiernan cuánto se ensancha el ángulo y cuánto se retrocede para
+     recuperarlo; subir el primero deforma, subir el segundo aleja. */
+  fovMaximo: 64,
+  retrocesoMaximo: 2.1,
   niebla: 1,             // bruma atmosférica: es lo que da la escala
   luz: 1,                // intensidad de todas las luces a la vez
   exposicion: 1,         // diafragma del revelado
   particulas: 1,         // gaviotas, polvo, salpicadura
   detalle: 1,            // multiplica la cantidad de objetos secundarios
+
+  /* ── Luz por capítulos ──────────────────────────────────────────────
+     Los tres mandos de la iluminación rediseñada. `giroSol` multiplica el
+     recorrido del acimut a lo largo del viaje: a 0 el sol no se mueve —que es
+     como estaba antes, y se nota— y a 1,5 cruza el cielo entero. `rebote`
+     gobierna la luz del cielo, que es la que impide que una cara en sombra
+     sea negra. `relleno`, la fría del lado contrario, que recorta siluetas. */
+  giroSol: 1,
+  rebote: 1,
+  relleno: 1,
 };
 
 /**
@@ -50,20 +66,20 @@ export const CONFIGURACIONES = {
   cinematografica: {
     velocidad: 0.85, movimiento: 1.25, oleaje: 1.15, balanceo: 1.3, reflejos: 1,
     velocidadGrua: 0.8, oscilacion: 1.35, velocidadCamion: 0.9, suspension: 1.2,
-    trafico: 0.8, distanciaCamara: 1.15, niebla: 1.35, luz: 0.95, exposicion: 1.08,
-    particulas: 1.2, detalle: 1,
+    trafico: 0.8, distanciaCamara: 1.15, fovMaximo: 62, retrocesoMaximo: 2.1, niebla: 1.35, luz: 0.95, exposicion: 1.08,
+    particulas: 1.2, detalle: 1, giroSol: 1.25, rebote: 1.1, relleno: 1.2,
   },
   rendimiento: {
     velocidad: 1, movimiento: 0.8, oleaje: 0.7, balanceo: 0.7, reflejos: 0.35,
     velocidadGrua: 1.1, oscilacion: 0.7, velocidadCamion: 1.1, suspension: 0.7,
-    trafico: 0.35, distanciaCamara: 1, niebla: 0.8, luz: 1, exposicion: 1,
-    particulas: 0.3, detalle: 0.45,
+    trafico: 0.35, distanciaCamara: 1, fovMaximo: 68, retrocesoMaximo: 1.7, niebla: 0.8, luz: 1, exposicion: 1,
+    particulas: 0.3, detalle: 0.45, giroSol: 0.8, rebote: 1, relleno: 0.7,
   },
   presentacion: {
     velocidad: 1.35, movimiento: 1.1, oleaje: 1, balanceo: 1, reflejos: 0.9,
     velocidadGrua: 1.4, oscilacion: 1, velocidadCamion: 1.35, suspension: 1,
-    trafico: 1.2, distanciaCamara: 0.92, niebla: 1, luz: 1.08, exposicion: 1.04,
-    particulas: 1.1, detalle: 1.15,
+    trafico: 1.2, distanciaCamara: 0.92, fovMaximo: 64, retrocesoMaximo: 2.1, niebla: 1, luz: 1.08, exposicion: 1.04,
+    particulas: 1.1, detalle: 1.15, giroSol: 1, rebote: 1.08, relleno: 1,
   },
 };
 

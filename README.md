@@ -119,18 +119,25 @@ más aire sin tocar nada más.
 
 ## Modelos y licencias
 
-**No se usa ningún recurso externo.** No es una limitación, es la única forma
-de publicar sin verificar la procedencia, el autor y la licencia de cada pieza.
+**No se usa ningún recurso externo.** La segunda fase pedía sustituir la
+geometría por modelos GLB/glTF con licencia documentada; se buscaron y no fue
+posible obtenerlos con la licencia verificada que el encargo exigía. El detalle
+completo de la búsqueda —qué orígenes se probaron, cuáles respondieron y por
+qué ninguno servía— está en **[`MODELOS.md`](MODELOS.md)**.
+
+Se aplicó la alternativa que el propio encargo prevé: versión propia, mejorada.
 Todo está generado por código:
 
 | Elemento | Cómo se construye |
 |---|---|
 | Casco del buque | Por secciones a lo largo de la eslora, con la manga variando según una curva —como las cuadernas de un astillero— y lanzamiento de proa |
-| Contenedor | Corrugado en **geometría**, no en textura: la cámara le pasa a dos metros y un corrugado pintado no proyecta sombra |
-| Grúa pórtico | Celosías de dos cordones y diagonales; carro, spreader y cuatro cables reconstruidos cada fotograma |
-| Camión | Tractora y semirremolque con diez ruedas, faros aditivos y suspensión amortiguada |
+| Contenedor | Corrugado en **geometría** desde un perfil trapezoidal barrido, bastidor que sobresale 3 cm de la chapa, ocho *corner castings* con chaflán, puertas completas con barras, manetas, guías y bisagras |
+| Grúa pórtico | Celosías de cordón y diagonal; carro, spreader con *twistlocks* y cuatro cables reconstruidos cada fotograma |
+| Camión | Cabina por **perfil extruido con bisel** —no cajas apiladas—, deflector separado, visera, retrovisores, estribos; diez ruedas y suspensión amortiguada |
+| Centro logístico | Marquesina sobre los muelles, cubierta a dos aguas, oficinas acristaladas, diez muelles con andén, niveladora y topes, semirremolques estacionados |
+| Carretera | Marcas viales al paso real (5 m de raya, 12 de vano), quitamiedos continuo, hitos de arista cada 12 m, taludes y pórticos |
+| Materiales | Biblioteca PBR con mapas de **normales y rugosidad generados por código** (`src/escena/materiales.js`) |
 | Agua | Tres trenes de ola en el vértice y Fresnel en el fragmento |
-| Texturas | Lienzo 2D: chapa, hormigón, asfalto, panel de nave y el costado rotulado del contenedor |
 | Sonido | WebAudio: ruido rosa filtrado y osciladores |
 
 Dependencias: **three.js 0.160.1** (MIT), **GSAP 3.12.5** con ScrollTrigger
@@ -236,17 +243,57 @@ un byte en la visita normal.
 ## Pruebas
 
 ```bash
-npm run build && npm run preview     # en una terminal
-npm run guion                        # el recorrido, sin navegador
-npm run pruebas                      # el recorrido funcional
+npm run verificar        # construye y pasa las cuatro suites
 ```
 
-`pruebas.mjs` necesita Playwright (`npx playwright install chromium`; si el
-navegador está en otra ruta, se pasa en `CHROMIUM`). Cubre los ocho capítulos
-en orden, que el contenedor esté en el encuadre, ida y vuelta del scroll,
+o por separado:
+
+```bash
+npm run guion            # el recorrido, en Node, sin navegador  (~0,1 s)
+npm run texto            # desbordes y relevo de texto, 3 pantallas
+npm run encuadre         # qué se ve de verdad, 3 relaciones de pantalla
+npm run pruebas          # el recorrido funcional completo
+```
+
+Las tres últimas necesitan Playwright (`npx playwright install chromium`; si el
+navegador está en otra ruta, se pasa en `CHROMIUM`).
+
+**`pruebas-guion.mjs`** no importa three.js a propósito, así que corre en Node
+en una décima de segundo. Comprueba que nada sea `undefined`, que la cámara no
+salte, que la pose sea función pura del progreso, que el camión no retroceda y
+que la descarga recorra sus **trece pasos en orden**. Dos comprobaciones nuevas
+de esta fase, y la segunda merece explicación:
+
+- **discontinuidades, no velocidad.** Comprobar «que entre dos muestras no se
+  mueva más de X» mide en realidad la velocidad, y o deja pasar saltos pequeños
+  o suspende movimientos legítimos. Lo que distingue un salto de un movimiento
+  rápido es cómo se comportan al muestrear más fino: uno continuo reparte el
+  recorrido entre el doble de muestras y su paso máximo cae a la mitad; una
+  discontinuidad mide lo mismo por muchas muestras que se tomen. Así que se
+  mide a N y a 2N y se compara la razón.
+- **un techo de velocidad aparte**, porque sin discontinuidades pero con un
+  tramo que baje cincuenta metros en un parpadeo, la maniobra tampoco se
+  entiende. Fue esta comprobación la que obligó a darle al arriado sobre el
+  remolque el 13 % del capítulo en vez del 8 %.
+
+**`pruebas-encuadre.mjs`** es la prueba que faltaba. Las funcionales dicen si
+la página responde; no dicen si se VE algo. Un plano puede cargar sin un error
+en consola, pasar toda la navegación y tener el camión a ciento once grados
+fuera del eje. Ésta proyecta la **caja envolvente** del sujeto de cada capítulo
+sobre la pantalla y mide si está en cuadro, qué fracción ocupa, y a qué
+distancia pasa la cámara de cualquier superficie —seis rayos— para que no se
+meta dentro de la geometría. En tres relaciones de pantalla, porque el fallo de
+móvil era justamente que nadie lo había medido en vertical.
+
+**`texto.mjs`** comprueba que ningún capítulo desborde su caja pegada de una
+altura de ventana, que ninguna línea de titular quede cortada por su propio
+recorte de animación, y que el relevo entre capítulos sea un relevo y no un
+amontonamiento. En 1440×900, 390×844 y **360×640**, que es donde falla.
+
+**`pruebas.mjs`** cubre los ocho capítulos en orden, ida y vuelta del scroll,
 recarga a mitad, anclas y botones, teclado, móvil, movimiento reducido, pausa,
-alternativa sin WebGL, el panel oculto y con `?ajustes`, y el descenso
-automático de calidad.
+alternativa sin WebGL, el panel con `?ajustes` y el descenso automático de
+calidad.
 
 Dos reglas de las pruebas que merece la pena conservar: donde hay que esperar a
 que la escena se asiente **se cuentan fotogramas pintados, no milisegundos**, y

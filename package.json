@@ -8,9 +8,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "guion": "node pruebas-guion.mjs",
+    "encuadre": "node pruebas-encuadre.mjs",
+    "texto": "node texto.mjs",
     "pruebas": "node pruebas.mjs",
-    "verificar": "npm run build && node pruebas-guion.mjs && node pruebas.mjs",
-    "guion": "node pruebas-guion.mjs"
+    "verificar": "npm run build && npm run guion && npm run texto && npm run encuadre && npm run pruebas"
   },
   "dependencies": {
     "gsap": "3.12.5",

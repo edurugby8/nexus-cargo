@@ -244,30 +244,71 @@ img, svg { max-width: 100%; display: block; }
    Panel de seguimiento
    -------------------------------------------------------------------------- */
 
+/* EL PANEL DE SEGUIMIENTO, REHECHO.
+
+   Tenía dos problemas, y los dos eran de sitio.
+
+   En escritorio estaba abajo a la IZQUIERDA, que es exactamente donde va el
+   texto de los capítulos: se pisaban. El propio `.cap__caja` reservaba hueco
+   con un `padding-right`, o sea que el hueco estaba guardado en la esquina
+   contraria a la que ocupaba el panel. Ahora va a la derecha, que es donde
+   siempre debió estar y donde el texto ya le había hecho sitio.
+
+   En móvil se volvía una tarjeta a lo ancho pegada al fondo, encima del texto,
+   tapando dos o tres líneas del capítulo que se estaba leyendo. Ahí el panel
+   entero sobra: lo que hace falta saber mientras se lee es QUÉ etapa va y si
+   sigue todo bien. Así que en pantallas estrechas se queda en una franja de
+   una línea —código, etapa, estado— y las cifras del capítulo no se enseñan,
+   porque el texto del capítulo ya las cuenta. El relato reserva su altura por
+   abajo, así que no se solapan nunca. */
+
 .hud {
-  position: fixed; left: var(--margen); bottom: clamp(1rem, 3vw, 1.8rem);
-  z-index: 88; width: min(290px, 68vw);
+  position: fixed; right: var(--margen); bottom: clamp(1rem, 3vw, 1.8rem);
+  z-index: 88; width: min(288px, 66vw);
   padding: .85rem 1rem 1rem; border-radius: 14px;
   border: 1px solid var(--texto-12);
-  background: rgba(7, 15, 24, .82);
+  background: rgba(7, 15, 24, .84);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   opacity: 0; transform: translateY(12px);
   transition: opacity .6s var(--curva), transform .6s var(--curva);
   pointer-events: none;
 }
 .hud[data-visible] { opacity: 1; transform: none; }
-/* En la portada todavía no se está siguiendo nada, y además se pisaba con los
-   botones: el panel entra cuando empieza el seguimiento de verdad. */
-.hud:not([data-visible]) { pointer-events: none; }
 .hud__codigo {
-  margin: 0 0 .7rem; display: flex; align-items: baseline; gap: .55rem;
-  padding-bottom: .6rem; border-bottom: 1px solid var(--texto-12);
+  margin: 0 0 .6rem; display: flex; align-items: baseline; gap: .55rem;
+  padding-bottom: .55rem; border-bottom: 1px solid var(--texto-12);
 }
-.hud__codigo span { font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: var(--texto-30); }
+.hud__codigo span { font-size: .58rem; letter-spacing: .2em; text-transform: uppercase; color: var(--texto-60); }
 .hud__codigo b {
   font-size: .86rem; letter-spacing: .12em; color: var(--naranja-vivo);
   font-variant-numeric: tabular-nums; font-weight: 600;
 }
+
+/* La etapa en curso. Es el dato que ata el panel con el rótulo de navegación
+   y con el texto: los tres dicen lo mismo, siempre, porque los tres salen del
+   mismo progreso. */
+.hud__etapa {
+  margin: 0 0 .5rem; display: flex; align-items: baseline; gap: .55rem;
+  font-size: .72rem; color: var(--blanco);
+}
+.hud__etapa i {
+  font-style: normal; font-size: .58rem; letter-spacing: .16em;
+  color: var(--cian); font-variant-numeric: tabular-nums;
+}
+
+/* Avance DENTRO del capítulo. Una línea de dos píxeles que dice cuánto queda
+   de la etapa en curso; la barra de arriba dice cuánto queda del viaje. */
+.hud__barra {
+  height: 2px; border-radius: 2px; background: var(--texto-12);
+  margin: 0 0 .7rem; overflow: hidden;
+}
+.hud__barra u {
+  display: block; height: 100%; width: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--cian), var(--naranja-vivo));
+  transform: scaleX(var(--local, 0)); transform-origin: 0 50%;
+  transition: transform .18s linear;
+}
+
 .hud__datos { margin: 0; display: grid; gap: .32rem; }
 .hud__datos > div { display: flex; justify-content: space-between; gap: .8rem; align-items: baseline; }
 .hud__datos dt { font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; color: var(--texto-60); }
@@ -290,10 +331,36 @@ img, svg { max-width: 100%; display: block; }
 .hud__estado[data-estado="entregado"] { color: var(--verde); }
 @keyframes latido { 0%, 100% { box-shadow: 0 0 0 2px currentColor; } 50% { box-shadow: 0 0 0 5px transparent; } }
 [data-movimiento="quieto"] .hud__estado::before { animation: none; }
-@media (max-width: 860px) { .hud { width: min(260px, 60vw); font-size: .92em; } }
-@media (max-width: 520px) {
-  .hud { left: var(--margen); right: var(--margen); width: auto; bottom: 4.6rem; }
-  .hud__datos { grid-template-columns: 1fr 1fr; gap: .3rem .9rem; }
+
+@media (max-width: 1000px) { .hud { width: min(252px, 52vw); font-size: .92em; } }
+
+/* ── Pantallas estrechas: una franja, no una tarjeta ───────────────── */
+@media (max-width: 760px) {
+  .hud {
+    left: 0; right: 0; bottom: 0; width: auto;
+    display: flex; align-items: center; gap: .7rem;
+    padding: .5rem var(--margen);
+    padding-bottom: calc(.5rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 0; border-width: 1px 0 0;
+    background: rgba(5, 11, 18, .9);
+    transform: translateY(100%);
+  }
+  .hud[data-visible] { transform: none; }
+  .hud__codigo {
+    margin: 0; padding: 0; border: 0; flex: none;
+    border-right: 1px solid var(--texto-12); padding-right: .7rem;
+  }
+  .hud__codigo span { display: none; }
+  .hud__codigo b { font-size: .68rem; }
+  .hud__etapa { margin: 0; flex: 1 1 auto; min-width: 0; font-size: .66rem; }
+  .hud__etapa span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Las cifras del capítulo las cuenta ya el texto que se está leyendo */
+  .hud__datos, .hud__barra { display: none; }
+  .hud__estado {
+    margin: 0; padding: 0; border: 0; flex: none;
+    font-size: .54rem; letter-spacing: .12em;
+  }
+  .hud__estado span { display: none; }
 }
 
 /* --------------------------------------------------------------------------
@@ -325,6 +392,29 @@ img, svg { max-width: 100%; display: block; }
   padding-right: clamp(0rem, 2vw, 2rem);
 }
 .cap__caja > * { position: relative; z-index: 1; max-width: 46rem; }
+/* Hueco reservado para la franja de seguimiento en pantallas estrechas. Se
+   reserva en el RELATO, no se confía en que el panel sea pequeño: así el texto
+   no puede quedar tapado por mucho que crezca la franja. */
+@media (max-width: 760px) {
+  .cap__caja { padding-bottom: calc(3.4rem + env(safe-area-inset-bottom, 0px)); }
+}
+/* Pantallas BAJAS. La caja mide exactamente una altura de ventana, así que en
+   un móvil de 640 px de alto el aire de arriba y de abajo se come más de un
+   tercio del sitio y la portada se salía por cinco píxeles —medido—. Aquí el
+   aire sobra: lo que hace falta es que el texto quepa. */
+@media (max-height: 700px) {
+  .cap__caja { padding-block: 3.4rem 2rem; }
+  .cap__caja--centro { padding-block: 3.4rem 2rem; }
+  .titulo { font-size: clamp(2rem, 7.6vw, 7.4rem); margin-bottom: .7rem; }
+  .titular { font-size: clamp(1.5rem, 4.8vw, 3.9rem); margin-bottom: .7rem; }
+  .lema { font-size: clamp(.92rem, 2vw, 1.5rem); margin-bottom: .7rem; }
+  .entradilla { font-size: .88rem; margin-bottom: .9rem; }
+  .etiqueta { margin-bottom: .8rem; font-size: .6rem; }
+  .acciones { gap: .5rem; margin-bottom: .9rem; }
+  .boton { padding: .62rem 1.1rem; font-size: .66rem; }
+  .cifras { gap: .6rem 1.4rem; }
+  .cifras__n { font-size: clamp(1.05rem, 2.4vw, 1.8rem); }
+}
 /* Velo de legibilidad: va DONDE está el texto y se apaga dentro de su propio
    recuadro, o el navegador lo corta y se ve la caja. */
 .cap__caja::before {
@@ -370,7 +460,28 @@ img, svg { max-width: 100%; display: block; }
 .titular { font-size: clamp(1.9rem, 5.4vw, 3.9rem); }
 .titular--medio { font-size: clamp(1.8rem, 4.6vw, 3.2rem); }
 .titular--grande { font-size: clamp(2.6rem, 8vw, 5.6rem); }
-.linea { display: block; overflow: hidden; }
+/* EL RECORTE DE LOS TITULARES, CORREGIDO.
+
+   El truco de animar una línea desde debajo de su propio recorte necesita un
+   `overflow: hidden`, y ese recorte iba a ras de la caja de línea. El problema
+   es que los titulares llevan `line-height: .94` —menos de uno, que es lo que
+   les da el aire apretado que tienen— y con eso la caja de línea es MÁS
+   PEQUEÑA que la letra: sobresalen las tildes por arriba y los rasgos de g, j,
+   p, q, y por abajo. El recorte se los comía.
+
+   Y se notaba más cuanto más estrecha la pantalla, porque el titular parte en
+   más líneas y hay más ocasiones de que una lleve una letra con rasgo. Medido:
+   9 líneas cortadas en 1440 px, 14 en 390 y 17 en 360. En español, con tildes
+   en casi todos los titulares, eso es texto roto en la mitad de la página.
+
+   Se abre el recorte lo que hace falta y se recupera exactamente lo mismo con
+   margen negativo, así el hueco que ocupa el titular no cambia ni un píxel y
+   la animación sigue funcionando igual. */
+.linea {
+  display: block; overflow: hidden;
+  padding: .28em .1em .34em;
+  margin: -.28em -.1em -.34em;
+}
 .linea__int { display: block; will-change: transform; }
 
 .lema {
@@ -548,7 +659,9 @@ select.campo__in { appearance: none; cursor: pointer;
    Revelados
    -------------------------------------------------------------------------- */
 
-[data-anima] [data-revela] .linea__int { transform: translateY(105%); }
+/* Con el recorte más abierto, un 105 % ya no basta para esconder la línea:
+   asomaría una franja de la letra antes de que empiece la animación. */
+[data-anima] [data-revela] .linea__int { transform: translateY(136%); }
 [data-anima] [data-revela]:not(:has(.linea__int)) { opacity: 0; transform: translateY(20px); }
 [data-anima] [data-aparece] { opacity: 0; transform: translateY(20px); }
 

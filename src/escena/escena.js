@@ -20,6 +20,7 @@ import {
   poseEn, mundoEn, MEDIDAS, TRAMOS, ALTURAS, capituloEn, inicioDe,
 } from './ruta.js';
 import { fijarResolucion } from './texturas.js';
+import { fijarResolucionMateriales, liberarMateriales } from './materiales.js';
 import { crearMar, crearCielo } from './mar.js';
 import { crearContenedor } from './contenedor.js';
 import { crearBarco } from './barco.js';
@@ -30,6 +31,7 @@ import { crearAmbiental } from './ambiental.js';
 
 export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar }) {
   fijarResolucion(caps.textura);
+  fijarResolucionMateriales(caps.textura);
 
   const renderer = new THREE.WebGLRenderer({ antialias: caps.antialias, alpha: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, caps.dpr));
@@ -86,11 +88,16 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   const relleno = new THREE.DirectionalLight(0xbcd2e8, 0.35);
   relleno.position.set(140, 60, -120);
   escena.add(relleno);
+  escena.add(relleno.target);
 
   /* ── El mundo ─────────────────────────────────────────────────── */
   const mar = crearMar({ caps });
   // El domo, con holgura respecto al plano lejano de la cámara
   const domoCielo = crearCielo(caps.lejos * 0.82);
+  mar.userData.envolvente = true;
+  domoCielo.userData.envolvente = true;
+  mar.traverse((o) => { o.userData.envolvente = true; });
+  domoCielo.traverse((o) => { o.userData.envolvente = true; });
   escena.add(mar, domoCielo);
 
   const barco = crearBarco({ caps });
@@ -150,6 +157,7 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   const objetivoMira = new THREE.Vector3();
   const dirSol = new THREE.Vector3();
   const puntoLocal = new THREE.Vector3();
+  const giroRemolque = new THREE.Quaternion();
 
   let reloj = 0;
   let movimiento = reducido ? 0 : 1;
@@ -161,6 +169,10 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   let fotogramas = 0;
   let capituloActual = -1;
   let inicioEntrada = 0;
+  /* Progreso impuesto desde fuera. Sólo lo usan las pruebas de encuadre, que
+     necesitan situar la escena en un punto exacto y sin amortiguación para
+     medir lo que el guion pide, no lo que la inercia ha dejado a medias. */
+  let forzado = null;
 
   /* Freno automático.
      Adivinar la potencia por núcleos y memoria se equivoca a menudo: un
@@ -175,9 +187,87 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   /** Altura total del documento, en alturas de ventana. */
   const alturaDocumento = () => (ALTURAS + 1) * window.innerHeight;
 
+  /* ── El progreso, medido sobre el DOCUMENTO REAL ──────────────────
+     Aquí estaba el fallo que arrastraba a casi todos los demás.
+
+     La versión anterior hacía `scrollY / (scrollHeight - innerHeight)`: el
+     progreso era la fracción del documento ENTERO. Pero el documento no son
+     sólo los ocho capítulos. Después del último vienen los servicios, el
+     formulario y el pie, y eso ocupa el 9,5 % de la página en escritorio y el
+     15,2 % en un móvil —medido—. Así que los ocho capítulos, que el guion
+     reparte entre 0 y 1, en realidad sólo llegaban a 0,955 en escritorio y a
+     0,892 en móvil. Resultado: leyendo el capítulo de entrega la escena iba
+     todavía por el centro logístico, y el rótulo de navegación marcaba el
+     capítulo anterior al que se estaba leyendo. Un capítulo entero de desfase,
+     y peor en móvil, porque allí la cola crece —el texto envuelve— mientras
+     los capítulos miden lo mismo.
+
+     Ahora el progreso se deriva de la GEOMETRÍA MEDIDA de las secciones. Cada
+     capítulo declara su tramo en el guion y ocupa su altura en el documento;
+     se mapea la una sobre la otra. Con eso, el capítulo que se está leyendo y
+     el que está pintando la escena son el mismo POR CONSTRUCCIÓN, en cualquier
+     pantalla y con cualquier cantidad de texto detrás. */
+  let mapa = [];
+
+  function medirTramos() {
+    const nuevo = [];
+    for (const t of TRAMOS) {
+      const el = document.getElementById(t.id);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      nuevo.push({
+        top: r.top + window.scrollY,
+        alto: Math.max(1, r.height),
+        desde: t.desde,
+        hasta: t.hasta,
+      });
+    }
+    if (nuevo.length) mapa = nuevo;
+  }
+
   function progresoDeScroll() {
-    const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-    return clamp(window.scrollY / max);
+    if (!mapa.length) {
+      const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      return clamp(window.scrollY / max);
+    }
+    const y = window.scrollY;
+    if (y <= mapa[0].top) return 0;
+    for (const t of mapa) {
+      if (y < t.top + t.alto) return lerp(t.desde, t.hasta, clamp((y - t.top) / t.alto));
+    }
+    /* Pasado el último capítulo el viaje está hecho: la escena se queda en su
+       plano final mientras se leen los servicios y el formulario. Quedarse es
+       lo correcto; seguir moviéndose sería inventar un noveno capítulo. */
+    return 1;
+  }
+
+  /* ── Encuadre según la pantalla ───────────────────────────────────
+     `fov` en three.js es el ángulo VERTICAL. Un plano compuesto en un portátil
+     —relación 1,6— con 46° verticales abarca 68° horizontales. El mismo plano
+     en un móvil en vertical —relación 0,46— abarca 22°: el encuadre se cierra
+     sobre un detalle y el camión, el buque o el almacén se salen por los
+     lados. Por eso en móvil casi no se veía lo que el plano pretendía enseñar.
+
+     Se corrige por los dos lados a la vez:
+     · se ensancha el ángulo vertical para recuperar parte del horizontal, con
+       tope, porque pasado cierto punto la perspectiva se deforma;
+     · y lo que el ángulo no alcanza se compensa RETROCEDIENDO por el eje de la
+       mirada, que conserva la composición sin deformarla.
+     Las dos cosas juntas dan un encuadre equivalente en cualquier pantalla sin
+     tener que escribir dos guiones. */
+  const GRADO = Math.PI / 180;
+  const ASPECTO_REF = 1.6;
+  /** Por debajo de esto la cámara estaría dentro del firme. */
+  const ALTURA_MINIMA = 0.9;
+
+  function encuadre(fovBase, aspecto) {
+    const horizontalRef = 2 * Math.atan(Math.tan((fovBase * GRADO) / 2) * ASPECTO_REF);
+    const verticalIdeal = 2 * Math.atan(Math.tan(horizontalRef / 2) / Math.max(0.2, aspecto));
+    const fov = Math.min(Math.max(fovBase, verticalIdeal / GRADO), AJUSTES.fovMaximo);
+    // Lo que el ángulo no ha podido recuperar, se recupera con distancia
+    const cubierto = 2 * Math.atan(Math.tan((fov * GRADO) / 2) * aspecto);
+    const retroceso = Math.tan(horizontalRef / 2) / Math.max(1e-4, Math.tan(cubierto / 2));
+    return { fov, retroceso: Math.min(Math.max(retroceso, 1), AJUSTES.retrocesoMaximo) };
   }
 
   function redimensionar() {
@@ -187,6 +277,7 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
     renderer.setSize(w, h, false);
     camara.aspect = w / h;
     camara.updateProjectionMatrix();
+    medirTramos();
   }
   redimensionar();
   window.addEventListener('resize', redimensionar);
@@ -220,21 +311,41 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
        Lo que manda es el scroll nativo; lo que se amortigua es esto, no la
        página. Secuestrar la rueda para «suavizar» rompe la barra, el teclado y
        el táctil, y la página deja de responder como el visitante espera. */
-    st.objetivo = progresoDeScroll();
-    st.progreso = reducido ? st.objetivo : damp(st.progreso, st.objetivo, 7.5, dt);
+    st.objetivo = forzado === null ? progresoDeScroll() : forzado;
+    st.progreso = (reducido || forzado !== null)
+      ? st.objetivo
+      : damp(st.progreso, st.objetivo, 7.5, dt);
 
     const mundo = mundoEn(st.progreso, AJUSTES);
 
     /* ── Cámara ─────────────────────────────────────────────────── */
-    poseEn(st.progreso, pose);
+    /* La curva estrecha entra por debajo de 0,95 de relación: eso cubre el
+       móvil en vertical y la tableta en vertical, y deja fuera el apaisado. */
+    poseEn(st.progreso, pose, camara.aspect < 0.95);
     objetivoPos.set(pose.pos[0], pose.pos[1], pose.pos[2]);
     objetivoMira.set(pose.mira[0], pose.mira[1], pose.mira[2]);
 
-    // La distancia de cámara se aplica sobre el vector de encuadre, así que
-    // alejarse no cambia hacia dónde se mira
-    if (AJUSTES.distanciaCamara !== 1) {
-      objetivoPos.sub(objetivoMira).multiplyScalar(AJUSTES.distanciaCamara).add(objetivoMira);
+    /* Distancia de cámara y compensación de pantalla, las dos sobre el vector
+       de encuadre: alejarse no cambia hacia dónde se mira. */
+    const enc = encuadre(pose.fov, camara.aspect);
+    const escala = AJUSTES.distanciaCamara * enc.retroceso;
+    if (escala !== 1) {
+      objetivoPos.sub(objetivoMira).multiplyScalar(escala).add(objetivoMira);
     }
+
+    /* SUELO.
+       El retroceso escala el vector de encuadre entero, incluida la altura, y
+       eso tiene una consecuencia que no se ve hasta que se mira: un plano bajo
+       —la cámara a ochenta centímetros, junto a la rueda del camión— escalado
+       por dos se va por DEBAJO del asfalto. La prueba de encuadre lo cazó
+       midiendo diez centímetros de holgura contra una superficie en el
+       capítulo de carretera, en móvil y en tableta.
+
+       Ninguno de los treinta y cinco planos pretende meter la cámara bajo
+       tierra, así que el suelo es un límite duro y no un ajuste. Sólo aplica
+       donde hay suelo: en alta mar y en el traslado de la grúa la cámara va a
+       decenas de metros de altura y esto no la toca nunca. */
+    if (objetivoPos.y < ALTURA_MINIMA) objetivoPos.y = ALTURA_MINIMA;
 
     // Entrada: la cámara llega desde más arriba y más lejos al arrancar
     if (inicioEntrada > 0) {
@@ -247,7 +358,7 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
       objetivoPos.z += (1 - e) * 180;
     }
 
-    const lambda = reducido ? 40 : 3.4;
+    const lambda = (reducido || forzado !== null) ? 1e3 : 3.4;
     posSuave.lerp(objetivoPos, 1 - Math.exp(-lambda * dt));
     miraSuave.lerp(objetivoMira, 1 - Math.exp(-lambda * 1.25 * dt));
 
@@ -262,30 +373,55 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
     camara.position.y += -st.suaveY * 1.1 * m;
     camara.lookAt(miraSuave);
     camara.rotateZ(Math.sin(reloj * 0.21) * 0.0035 * m - st.suaveX * 0.008 * m);
-    camara.fov = lerp(camara.fov, pose.fov, 1 - Math.exp(-3 * dt));
+    camara.fov = lerp(camara.fov, enc.fov, 1 - Math.exp(-3 * dt));
     camara.updateProjectionMatrix();
 
     /* ── Ambiente ───────────────────────────────────────────────── */
     const amb = mundo.ambiente;
     niebla.color.setHex(amb.cieloHorizonte);
     niebla.density = amb.niebla * AJUSTES.niebla;
-    // El sol recorre el cielo: la altura sale del guion, el acimut es fijo
+
+    /* ── El sol ───────────────────────────────────────────────────
+       Altura Y ACIMUT, los dos del guion. El acimut es la corrección que más
+       cambia la página: antes era una constante, así que el sol salía siempre
+       del mismo sitio y los ocho capítulos estaban iluminados exactamente
+       igual —un viaje de trece horas con una sola luz—. Ahora gira ciento
+       treinta grados a lo largo del recorrido, y con eso el buque queda a
+       contraluz al amanecer, la grúa recibe la luz de costado y la nave del
+       destino la recibe de frente al atardecer. */
     const elev = amb.alturaSol * Math.PI * 0.5;
-    dirSol.set(Math.cos(elev) * -0.62, Math.sin(elev) + 0.06, Math.cos(elev) * 0.78).normalize();
+    const az = amb.acimut * AJUSTES.giroSol;
+    dirSol.set(
+      Math.cos(elev) * Math.sin(az),
+      Math.sin(elev) + 0.06,
+      Math.cos(elev) * Math.cos(az),
+    ).normalize();
     sol.position.copy(dirSol).multiplyScalar(320).add(miraSuave);
     sol.color.setHex(amb.colorLuz);
     sol.intensity = amb.fuerzaLuz * AJUSTES.luz;
-    cielo.intensity = (1.05 + amb.alturaSol * 0.75) * AJUSTES.luz;
+
+    /* El rebote del cielo sube al final del viaje a propósito. Con el sol
+       bajo, la luz directa apenas llega y casi todo lo que se ve es cielo
+       rebotado; mantener el rebote bajo era lo que dejaba el centro logístico
+       y la entrega apagados y del color del barro. */
+    cielo.intensity = amb.rebote * AJUSTES.rebote * AJUSTES.luz;
     cielo.color.setHex(amb.cieloAlto);
-    cielo.groundColor.setHex(0x3b3a34);
-    relleno.intensity = (0.4 + amb.alturaSol * 0.35) * AJUSTES.luz;
+    cielo.groundColor.setHex(0x4a4840);
+    // El relleno viene SIEMPRE del lado opuesto al sol: es lo que recorta la silueta
+    relleno.position.copy(dirSol).multiplyScalar(-260).add(miraSuave);
+    relleno.position.y = Math.abs(relleno.position.y) + 40;
+    relleno.intensity = amb.relleno * AJUSTES.relleno * AJUSTES.luz;
+
     renderer.toneMappingExposure = AJUSTES.exposicion
+      * amb.exposicion
       * lerp(0.95, 1.25, amb.alturaSol)
       * lerp(1.12, 1, clamp(camara.aspect / 1.6));
     // El objetivo sigue a la cámara: fija la dirección de la luz y, cuando hay
     // sombras, centra además el mapa donde se está mirando.
     sol.target.position.copy(miraSuave);
     sol.target.updateMatrixWorld();
+    relleno.target.position.copy(miraSuave);
+    relleno.target.updateMatrixWorld();
 
     /* ── Actores ────────────────────────────────────────────────── */
     barco.userData.actualizar(mundo, reloj, AJUSTES);
@@ -322,8 +458,14 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
       camion.updateMatrixWorld(true);
       puntoLocal.copy(camion.userData.apoyo);
       heroe.position.copy(puntoLocal.applyMatrix4(camion.matrixWorld));
-      heroe.quaternion.copy(camion.userData.remolque.getWorldQuaternion(new THREE.Quaternion()));
-      heroe.rotateY(Math.PI / 2);
+      /* Se copia el giro del remolque y NO se añade nada más. El contenedor se
+         construye con su largo sobre su propio eje X, igual que el camión, y
+         el cuarto de vuelta que el camión ya tiene para mirar hacia −Z viene
+         dentro de este cuaternión. El `rotateY(π/2)` que había aquí lo sumaba
+         por segunda vez y dejaba el contenedor CRUZADO sobre el remolque,
+         asomando por un costado: era el fallo más visible de los capítulos de
+         carretera y centro logístico. */
+      heroe.quaternion.copy(camion.userData.remolque.getWorldQuaternion(giroRemolque));
     }
 
     mar.userData.actualizar(mundo, reloj, AJUSTES, dt, dirSol);
@@ -338,8 +480,13 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
     renderer.render(escena, camara);
     fotogramas++;
 
-    // Aviso de capítulo: una sola vez por cambio, no en cada fotograma
-    const cap = capituloEn(st.progreso);
+    /* Aviso de capítulo: una sola vez por cambio, no en cada fotograma.
+       Se lee del progreso OBJETIVO, no del amortiguado. El amortiguado es el
+       de la cámara, que va medio segundo por detrás a propósito; si el rótulo
+       y el panel fueran con él, el visitante vería marcado un capítulo
+       distinto del que está leyendo cada vez que se desplaza deprisa. El texto
+       y la interfaz siguen al scroll; sólo la cámara se deja llevar. */
+    const cap = capituloEn(st.objetivo);
     const cambio = cap.indice !== capituloActual;
     if (cambio) capituloActual = cap.indice;
     alProgreso?.(st.progreso, cap, mundo, cambio);
@@ -360,10 +507,21 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
 
   if (window.__debugNX) {
     window.__escenaNX = {
-      escena, camara, renderer, barco, gruas, camion, heroe, st, AJUSTES, MEDIDAS,
+      THREE, escena, camara, renderer, barco, gruas, camion, heroe, st, AJUSTES, MEDIDAS,
       get fotogramas() { return fotogramas; },
       get freno() { return { escalon, medioFotograma: Math.round(medioFotograma) }; },
       mundo: () => mundoEn(st.progreso, AJUSTES),
+      capituloDe: (p) => capituloEn(p).capitulo.id,
+      /* Sitúa la escena en un progreso exacto y pinta un fotograma con la
+         amortiguación desactivada, de forma SÍNCRONA. Sin esto, una prueba de
+         encuadre sólo podría medir a dónde ha llegado la inercia, que no es lo
+         mismo que lo que el guion pide. */
+      irA(p) {
+        forzado = clamp(p);
+        anterior = performance.now() - 16;
+        fotograma();
+        forzado = null;
+      },
     };
   }
 
@@ -385,6 +543,7 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
       window.removeEventListener('resize', redimensionar);
       document.removeEventListener('visibilitychange', alVisibilidad);
       escena.traverse((o) => { o.userData?.liberar?.(); });
+      liberarMateriales();
       renderer.dispose();
       renderer.domElement.remove();
     },

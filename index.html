@@ -96,6 +96,10 @@
 <!-- Panel de seguimiento: los datos del envío, integrados en la escena -->
 <aside class="hud" id="hud" aria-label="Seguimiento del envío">
   <p class="hud__codigo"><span>Envío</span><b>NXCU 482019</b></p>
+  <!-- Etapa en curso: en móvil es lo único que se enseña, porque es lo único
+       que de verdad hace falta saber mientras se lee. -->
+  <p class="hud__etapa" id="hud-etapa"><i id="hud-num">01</i><span id="hud-rotulo">Alta mar</span></p>
+  <div class="hud__barra" id="hud-barra" aria-hidden="true"><u></u></div>
   <dl class="hud__datos" id="hud-datos"></dl>
   <p class="hud__estado" id="hud-estado" data-estado="transito">En tránsito</p>
 </aside>

@@ -124,21 +124,71 @@ export function barcoEn(p) {
 /* ── La grúa y el contenedor ──────────────────────────────────────── */
 
 /**
- * El ciclo de descarga, por fases. Las fracciones son del capítulo, y están
- * repartidas como en una operación de verdad: bajar el spreader es lo más
- * lento, el traslado del carro lo más largo, y el aterrizaje sobre el
- * remolque otra vez lento porque ahí no se puede fallar.
+ * EL CICLO DE DESCARGA, EN TRECE PASOS.
+ *
+ * La primera versión tenía siete fases y no se entendía. No porque faltara
+ * movimiento, sino porque faltaban los momentos MUERTOS: la grúa bajaba,
+ * agarraba, subía y trasladaba sin detenerse nunca, y una operación sin pausas
+ * se lee como una animación, no como una máquina trabajando. Lo que hace
+ * comprensible una descarga es exactamente lo contrario de lo que parece: los
+ * instantes en los que NO pasa nada mientras algo se decide.
+ *
+ * Los trece pasos, con lo que cada uno aporta a que se entienda:
+ *
+ *   1  aproxima   el carro sale sobre el buque · establece de dónde viene
+ *   2  bajaVacio  el spreader desciende vacío · da la altura del buque
+ *   3  alinea     corrección lateral fina · dice que hay alguien pilotando
+ *   4  posa       el spreader toca la pila · el primer contacto
+ *   5  encaja     giran los twistlocks · el agarre, en primer plano
+ *   6  tensa      los cables cogen carga, nada se mueve · el peso
+ *   7  despega    los primeros dos metros, muy lentos · el momento crítico
+ *   8  iza        izado completo hasta altura de paso
+ *   9  traslada   el carro cruza hacia tierra · el recorrido largo
+ *  10  frena      el carro para y la carga sigue · las treinta toneladas
+ *  11  arria      descenso sobre el remolque
+ *  12  asienta    el apoyo, y la suspensión del camión cede
+ *  13  suelta     se abren los twistlocks y el spreader se va
+ *
+ * Los tramos NO son iguales, y ahí está media legibilidad: `encaja` y `tensa`
+ * ocupan casi tanto scroll como el traslado entero aunque no muevan nada, y
+ * `despega` dura lo mismo que un izado seis veces más largo. Es el reparto de
+ * una operación de verdad, donde el tiempo se va en los milímetros.
  */
-const FASES = {
-  bajaVacio: [0.00, 0.14],
-  encaja:    [0.14, 0.22],
-  tensa:     [0.22, 0.28],
-  iza:       [0.28, 0.46],
-  traslada:  [0.46, 0.72],
-  arria:     [0.72, 0.90],
-  suelta:    [0.90, 1.00],
-};
-const fase = (t, [a, b]) => clamp((t - a) / (b - a));
+const PASOS = [
+  ['aproxima',  0.000, 0.075],
+  ['bajaVacio', 0.075, 0.175],
+  ['alinea',    0.175, 0.225],
+  ['posa',      0.225, 0.270],
+  ['encaja',    0.270, 0.340],
+  ['tensa',     0.340, 0.400],
+  ['despega',   0.400, 0.470],
+  ['iza',       0.470, 0.580],
+  ['traslada',  0.580, 0.715],
+  ['frena',     0.715, 0.770],
+  /* El descenso sobre el remolque es el tramo MÁS LARGO de los trece, y no
+     por capricho. Ocupaba el 8 % del capítulo para bajar cincuenta y cinco
+     metros: a ritmo de lectura normal, dos décimas de segundo. Se veía un
+     borrón, no una maniobra. Aquí es donde una operación de verdad se toma su
+     tiempo, porque es donde no se puede fallar, y el guion ahora lo refleja.
+     Lo cazó la prueba de velocidad por tramo del guion. */
+  ['arria',     0.770, 0.900],
+  ['asienta',   0.900, 0.950],
+  ['suelta',    0.950, 1.000],
+];
+
+/** En qué paso cae un tiempo local, y cuánto lleva recorrido dentro de él. */
+function pasoEn(t) {
+  for (let i = 0; i < PASOS.length; i++) {
+    const [nombre, a, b] = PASOS[i];
+    if (t < b || i === PASOS.length - 1) {
+      return { indice: i, nombre, local: clamp((t - a) / (b - a)) };
+    }
+  }
+  return { indice: 0, nombre: PASOS[0][0], local: 0 };
+}
+
+/** Los nombres, en orden. Para las pruebas y para el panel. */
+export const PASOS_GRUA = PASOS.map((p) => p[0]);
 
 export function gruaEn(p, ajustes = { velocidadGrua: 1, oscilacion: 1 }) {
   const t0 = localDe(p, 'grua');
@@ -152,98 +202,161 @@ export function gruaEn(p, ajustes = { velocidadGrua: 1, oscilacion: 1 }) {
   const yCubierta = 32.5;        // parte alta de la pila donde viaja el nuestro
   const yCamion = MEDIDAS.camion.plataforma + MEDIDAS.contenedor.alto / 2;
   const yCrucero = 58;           // altura de paso por encima del buque
+  const zEspera = zBuque + 26;   // de dónde sale el carro al empezar
 
   if (antes) {
     return {
-      carroZ: zBuque, spreaderY: yCrucero, cerrado: 0, tension: 0,
+      carroZ: zEspera, spreaderY: yCrucero, cerrado: 0, tension: 0,
       contenedor: { x: MEDIDAS.gruaX, y: yCubierta, z: zBuque }, colgando: false,
-      fase: 'espera', balanceo: 0,
+      fase: 'espera', paso: -1, avance: 0, balanceo: 0, desvio: 0, asiento: 0,
     };
   }
   if (despues) {
     return {
-      carroZ: zCamion, spreaderY: yCrucero, cerrado: 0, tension: 0,
-      contenedor: null, colgando: false, fase: 'hecho', balanceo: 0,
+      carroZ: zCamion, spreaderY: yCamion + 14, cerrado: 0, tension: 0,
+      contenedor: null, colgando: false,
+      fase: 'hecho', paso: PASOS.length, avance: 1, balanceo: 0, desvio: 0, asiento: 0,
     };
   }
 
-  /* Altura del gancho. Cada tramo con su propia curva: el vacío baja rápido y
-     frena al final; la carga sube con arranque lento; el aterrizaje es el más
-     cuidadoso de todos. */
-  let y = yCrucero;
+  const { indice, nombre, local } = pasoEn(t);
+
+  /* Estado por defecto: el del comienzo del ciclo. Cada paso cambia sólo lo
+     suyo, y lo que no toca se queda donde lo dejó el anterior. Escribirlo así
+     —en vez de una cadena de `if` con todo repetido— es lo que permitió pasar
+     de siete pasos a trece sin que el archivo se volviera ilegible. */
   let carro = zBuque;
+  let y = yCubierta;
   let cerrado = 0;
   let tension = 0;
   let colgando = false;
-  let nombre = 'bajaVacio';
+  let desvio = 0;      // corrección lateral del spreader, en metros
+  let asiento = 0;     // cuánto ha cedido la suspensión del camión
 
-  if (t < FASES.encaja[0]) {
-    y = lerp(yCrucero, yCubierta, salidaCubica(fase(t, FASES.bajaVacio)));
-  } else if (t < FASES.tensa[0]) {
-    y = yCubierta;
-    cerrado = entradaSalida(fase(t, FASES.encaja));
-    nombre = 'encaja';
-  } else if (t < FASES.iza[0]) {
-    y = yCubierta;
-    cerrado = 1;
-    // Los cables se tensan ANTES de que la carga se despegue. Es el momento
-    // que más delata a una grúa falsa: la de verdad no arranca de golpe.
-    tension = entradaSalida(fase(t, FASES.tensa));
-    colgando = true;
-    nombre = 'tensa';
-  } else if (t < FASES.traslada[0]) {
-    cerrado = 1; tension = 1; colgando = true;
-    y = lerp(yCubierta, yCrucero, entradaSalida(fase(t, FASES.iza)));
-    nombre = 'iza';
-  } else if (t < FASES.arria[0]) {
-    cerrado = 1; tension = 1; colgando = true;
-    y = yCrucero;
-    carro = lerp(zBuque, zCamion, entradaSalida(fase(t, FASES.traslada)));
-    nombre = 'traslada';
-  } else if (t < FASES.suelta[0]) {
-    cerrado = 1; tension = 1; colgando = true;
-    carro = zCamion;
-    y = lerp(yCrucero, yCamion, entradaSalida(fase(t, FASES.arria)));
-    nombre = 'arria';
-  } else {
-    carro = zCamion;
-    const s = fase(t, FASES.suelta);
-    cerrado = 1 - entradaSalida(clamp(s * 2));
-    y = lerp(yCamion, yCrucero, clamp((s - 0.4) / 0.6) ** 2);
-    colgando = s < 0.4;
-    nombre = 'suelta';
-    tension = 1 - clamp(s * 2.5);
+  switch (nombre) {
+    case 'aproxima':
+      carro = lerp(zEspera, zBuque, entradaSalida(local));
+      y = yCrucero;
+      desvio = lerp(0.9, 0.35, local);
+      break;
+    case 'bajaVacio':
+      // Baja rápido y frena al final: nadie se acerca despacio desde arriba
+      y = lerp(yCrucero, yCubierta + 1.4, salidaCubica(local));
+      desvio = lerp(0.35, 0.12, local);
+      break;
+    case 'alinea':
+      /* La corrección fina. Dos tanteos que se van apagando: es el gesto que
+         más dice que hay una persona en la cabina, y cuesta una línea. */
+      y = yCubierta + 1.4 - 1.1 * entradaSalida(local);
+      desvio = 0.12 * Math.cos(local * Math.PI * 2.5) * (1 - local);
+      break;
+    case 'posa':
+      y = lerp(yCubierta + 0.3, yCubierta, salidaCubica(local));
+      break;
+    case 'encaja':
+      // Los twistlocks giran un cuarto de vuelta. Nada más se mueve.
+      cerrado = entradaSalida(local);
+      break;
+    case 'tensa':
+      /* Los cables se tensan ANTES de que la carga se despegue. Es el momento
+         que más delata a una grúa falsa: la de verdad no arranca de golpe. */
+      cerrado = 1;
+      tension = entradaSalida(local);
+      colgando = true;
+      break;
+    case 'despega':
+      // Dos metros, y son los más lentos de los ochenta que va a subir
+      cerrado = 1; tension = 1; colgando = true;
+      y = yCubierta + 2 * entradaSalida(local);
+      break;
+    case 'iza':
+      cerrado = 1; tension = 1; colgando = true;
+      y = lerp(yCubierta + 2, yCrucero, entradaSalida(local));
+      break;
+    case 'traslada':
+      cerrado = 1; tension = 1; colgando = true;
+      y = yCrucero;
+      carro = lerp(zBuque, zCamion + 4, suave(0, 1, local));
+      break;
+    case 'frena':
+      /* El carro llega y para. La carga no: sigue, se pasa, y vuelve. Este
+         paso no existía y es el que convierte la caja en treinta toneladas. */
+      cerrado = 1; tension = 1; colgando = true;
+      y = yCrucero;
+      carro = lerp(zCamion + 4, zCamion, salidaCubica(local));
+      break;
+    case 'arria':
+      cerrado = 1; tension = 1; colgando = true;
+      carro = zCamion;
+      y = lerp(yCrucero, yCamion + 0.25, entradaSalida(local));
+      break;
+    case 'asienta':
+      cerrado = 1; colgando = true;
+      carro = zCamion;
+      y = lerp(yCamion + 0.25, yCamion, salidaCubica(local));
+      // Los cables se destensan a medida que el remolque coge el peso
+      tension = 1 - entradaSalida(local);
+      asiento = entradaSalida(local);
+      break;
+    default: {           // 'suelta'
+      carro = zCamion;
+      cerrado = 1 - entradaSalida(clamp(local * 2.2));
+      /* El spreader se retira lo justo para dejar libre el contenedor: unos
+         catorce metros, no los cincuenta y cinco de la altura de crucero.
+         Subirlo entero en el cinco por ciento final del capítulo era un
+         tirón —1,26 m entre fotogramas contiguos, medido por la prueba de
+         continuidad—, y además no es lo que hace una grúa: sube a salvar la
+         carga y espera ahí al siguiente ciclo.
+         Con derivada nula en los dos extremos, para que ni arranque ni pare
+         de golpe. */
+      y = lerp(yCamion, yCamion + 14, entradaSalida(clamp((local - 0.35) / 0.65)));
+      colgando = false;
+      asiento = 1;
+      break;
+    }
   }
 
   /* Balanceo de la carga.
      Treinta toneladas colgadas de cuatro cables no paran cuando para el carro.
-     Se calcula la ACELERACIÓN del carro por diferencias finitas y se convierte
-     en un péndulo amortiguado: la carga se queda atrás al arrancar y se
-     adelanta al frenar, exactamente al revés de lo que hace el carro. */
+     Se calcula la ACELERACIÓN del carro por diferencias finitas sobre la misma
+     función que lo mueve, y se convierte en un péndulo amortiguado: la carga
+     se queda atrás al arrancar y se adelanta al frenar, exactamente al revés
+     de lo que hace el carro. */
   let balanceo = 0;
   if (colgando && nombre !== 'tensa') {
-    const h = 0.004;
-    const carroEn = (u) => {
-      const f = fase(clamp(u), FASES.traslada);
-      return lerp(zBuque, zCamion, entradaSalida(f));
-    };
-    const aceleracion = (carroEn(t + h) - 2 * carroEn(t) + carroEn(t - h)) / (h * h);
+    const h = 0.003;
+    const aceleracion = (carroDe(t + h) - 2 * carroDe(t) + carroDe(t - h)) / (h * h);
     const largoCable = Math.max(2, MEDIDAS.grua.alto - 8 - y);
     balanceo = clamp(-aceleracion * 1.1e-5, -1, 1) * Math.sqrt(largoCable) * 0.5;
-    // Y al soltar el carro queda la oscilación libre, que se apaga sola
-    if (nombre === 'arria' || nombre === 'suelta') {
-      balanceo += pendulo(clamp((t - FASES.arria[0]) / 0.2), 1.1, 3.2) * 1.4;
+    // Pasado el frenazo queda la oscilación libre, que se apaga sola
+    if (nombre === 'frena' || nombre === 'arria' || nombre === 'asienta') {
+      const desde = PASOS[9][1];
+      balanceo += pendulo(clamp((t - desde) / 0.22), 1.1, 3.2) * 1.6;
     }
     balanceo *= ajustes.oscilacion;
   }
 
   const contenedor = colgando
-    ? { x: MEDIDAS.gruaX, y, z: carro + balanceo }
-    : (nombre === 'bajaVacio' || nombre === 'encaja')
+    ? { x: MEDIDAS.gruaX + desvio, y, z: carro + balanceo }
+    : (indice <= 4)
       ? { x: MEDIDAS.gruaX, y: yCubierta, z: zBuque }
       : { x: MEDIDAS.gruaX, y: yCamion, z: zCamion };
 
-  return { carroZ: carro, spreaderY: y, cerrado, tension, contenedor, colgando, fase: nombre, balanceo };
+  return {
+    carroZ: carro, spreaderY: y, cerrado, tension, contenedor, colgando,
+    fase: nombre, paso: indice, avance: local, balanceo, desvio, asiento,
+  };
+}
+
+/** Dónde está el carro en un tiempo local dado. Se usa para derivarlo. */
+function carroDe(t) {
+  const { nombre, local } = pasoEn(clamp(t));
+  const zBuque = MEDIDAS.amarre.z;
+  const zCamion = MEDIDAS.camionEspera.z;
+  if (nombre === 'aproxima') return lerp(zBuque + 26, zBuque, entradaSalida(local));
+  if (nombre === 'traslada') return lerp(zBuque, zCamion + 4, suave(0, 1, local));
+  if (nombre === 'frena') return lerp(zCamion + 4, zCamion, salidaCubica(local));
+  return pasoEn(clamp(t)).indice < 8 ? zBuque : zCamion;
 }
 
 /* ── El camión ────────────────────────────────────────────────────── */
@@ -277,7 +390,22 @@ function camionZ(p, ajustes) {
   }
   const centro = localDe(p, 'centro');
   if (p < TRAMOS[7].desde) {
-    return lerp(M.carretera.hasta, M.centro, entradaSalida(clamp(centro * 1.15)));
+    /* La llegada al centro logístico, re-repartida.
+       Antes este tramo se recorría con `centro * 1.15`: el camión llegaba a la
+       nave en el último 13 % del capítulo y los otros siete octavos eran
+       carretera vacía con el almacén demasiado lejos para leerse. Medido: a
+       mitad del capítulo el camión estaba todavía a 89 metros del edificio y
+       la cámara, 124 por detrás.
+       Ahora el capítulo se divide en tres actos que sí cuentan algo: se acerca
+       y el edificio crece (0 a 0,45), entra en el recinto y rodea el patio
+       (0,45 a 0,78), y se coloca frente a su muelle (0,78 a 1). Nunca hay un
+       tramo largo sin nada delante. */
+    const t = clamp(centro);
+    const entrada = M.centro + 46;      // la boca del recinto
+    const patio = M.centro + 14;        // ya dentro, bordeando los muelles
+    if (t < 0.45) return lerp(M.carretera.hasta, entrada, entradaSalida(t / 0.45));
+    if (t < 0.78) return lerp(entrada, patio, entradaSalida((t - 0.45) / 0.33));
+    return lerp(patio, M.centro, entradaSalida((t - 0.78) / 0.22));
   }
   const fin = localDe(p, 'entrega');
   return lerp(M.centro, M.destino, entradaSalida(clamp(fin * 1.35)));
@@ -344,21 +472,39 @@ export function centroEn(p) {
  * interpolan de forma continua, así que no hay ni un corte.
  */
 const MOMENTOS = [
-  /* p, cielo alto, horizonte, niebla, color de luz, fuerza, altura del sol.
+  /* Una entrada POR CAPÍTULO, anclada a su comienzo, más el cierre. Antes las
+     ocho entradas caían en valores de progreso escogidos a ojo (0,13, 0,25,
+     0,40…) que no coincidían con ningún límite de capítulo: la luz cambiaba a
+     mitad de una escena y el capítulo entero se quedaba con el sobrante del
+     anterior. Ahora cada capítulo ESTRENA su luz y la termina, que es lo que
+     pedía el encargo cuando hablaba de iluminación por capítulo.
+
+     Columnas:
+       cielo alto · horizonte · niebla · color de luz · fuerza · altura del sol
+       · acimut · relleno · rebote de cielo · sesgo de exposición
+
+     El ACIMUT es nuevo y es lo que más cambia. Antes el sol venía siempre de
+     la misma dirección y los ocho capítulos estaban iluminados igual: un
+     recorrido de trece horas con una sola luz. Ahora gira 130° a lo largo del
+     viaje, así que el buque se ve a contraluz al amanecer, la grúa recibe la
+     luz de costado a media mañana y la nave del destino la recibe de frente al
+     atardecer. Es la misma escena y parece otra.
 
      Los horizontes van CONTENIDOS a propósito. La primera versión los puso en
      pardos muy saturados y, combinados con la niebla, el encuadre entero se
      volvía del mismo color de barro: no se distinguía el mar del cielo ni del
      buque. Un amanecer sobre el mar es sobre todo azul con una franja cálida
      estrecha, no un filtro naranja encima de todo. */
-  [0.00, 0x0a1a30, 0x6d6a72, 0.00058, 0xffb877, 1.15, 0.10],
-  [0.13, 0x123a58, 0x8a8286, 0.00062, 0xffc48c, 1.30, 0.18],
-  [0.25, 0x255083, 0xb9bfc2, 0.00068, 0xfff0d2, 1.85, 0.36],
-  [0.40, 0x33659a, 0xc9d0d4, 0.00090, 0xfff6e4, 2.10, 0.52],
-  [0.55, 0x3a70ac, 0xccd6de, 0.00105, 0xfffaf0, 2.20, 0.62],
-  [0.72, 0x36699f, 0xc6c7c2, 0.00110, 0xfff3d8, 2.05, 0.54],
-  [0.86, 0x223d5c, 0xab8f79, 0.00056, 0xffcf95, 1.35, 0.30],
-  [1.00, 0x142640, 0x8f6a52, 0.00072, 0xff9e5c, 1.05, 0.14],
+  /*  p      cieloAlto  horizonte  niebla   luz      fuerza altura acimut relleno rebote exposición */
+  [0.0000, 0x0a1a30, 0x6d6a72, 0.00058, 0xffb877, 1.35, 0.09, -0.95, 0.55, 1.35, 1.00],  // 1 alta mar
+  [0.1264, 0x123a58, 0x8a8286, 0.00064, 0xffc48c, 1.55, 0.19, -0.66, 0.52, 1.40, 1.02],  // 2 puerto
+  [0.2414, 0x255083, 0xb9bfc2, 0.00070, 0xfff0d2, 2.00, 0.38, -0.28, 0.46, 1.45, 1.04],  // 3 descarga
+  [0.3908, 0x2f5f95, 0xc6ced3, 0.00086, 0xfff6e4, 2.20, 0.54,  0.06, 0.42, 1.50, 1.02],  // 4 aduanas
+  [0.5057, 0x36699f, 0xccd6de, 0.00100, 0xfffaf0, 2.30, 0.62,  0.30, 0.40, 1.55, 1.00],  // 5 salida
+  [0.5977, 0x3a70ac, 0xcdd7df, 0.00108, 0xfff8ea, 2.25, 0.58,  0.58, 0.44, 1.55, 0.99],  // 6 en ruta
+  [0.7586, 0x2f5b8c, 0xc0ae96, 0.00072, 0xffdfae, 1.95, 0.34,  0.92, 0.58, 1.60, 1.06],  // 7 centro
+  [0.8851, 0x223d5c, 0xb59477, 0.00058, 0xffc089, 1.70, 0.20,  1.16, 0.66, 1.65, 1.12],  // 8 entrega
+  [1.0000, 0x142640, 0x8f6a52, 0.00072, 0xff9e5c, 1.30, 0.11,  1.34, 0.72, 1.70, 1.18],  // cierre
 ];
 
 const mezclaHex = (a, b, t) => {
@@ -382,6 +528,16 @@ export function ambienteEn(p) {
     colorLuz: mezclaHex(a[4], b[4], t),
     fuerzaLuz: lerp(a[5], b[5], t),
     alturaSol: lerp(a[6], b[6], t),
+    /** Acimut del sol, en radianes. Gira a lo largo del viaje. */
+    acimut: lerp(a[7], b[7], t),
+    /** Fuerza del relleno frío que viene del lado contrario. */
+    relleno: lerp(a[8], b[8], t),
+    /** Rebote del cielo. Es lo que impide que una cara en sombra sea negra. */
+    rebote: lerp(a[9], b[9], t),
+    /** Sesgo de exposición del capítulo. */
+    exposicion: lerp(a[10], b[10], t),
+    /** Cuánto están encendidas las luces artificiales: 0 de día, 1 de noche. */
+    practicas: clamp(1 - lerp(a[6], b[6], t) * 2.4),
   };
 }
 
@@ -402,76 +558,172 @@ export function ambienteEn(p) {
  * hay una sola trayectoria.
  */
 const PLANOS = {
+  /* CAPÍTULO 1 · ALTA MAR
+     Descenso desde muy arriba hasta el costado del buque. El plano de apertura
+     está lejísimos a propósito: es el único momento del recorrido en el que se
+     ve el barco entero, y hace falta para que todo lo que viene después tenga
+     una escala contra la que medirse. */
   oceano: [
-    // Vista aérea alta, y descenso progresivo hacia el buque
-    { t: 0.00, ancla: 'barco', pos: [-210, 430, 360], mira: [40, 18, 0], fov: 36 },
+    { t: 0.00, ancla: 'barco', pos: [-210, 430, 360], mira: [40, 18, 0], fov: 36,
+      movil: { pos: [-150, 470, 430], mira: [40, 10, 0], fov: 40 } },
     { t: 0.45, ancla: 'barco', pos: [-60, 205, 225], mira: [60, 24, 0], fov: 40 },
     { t: 0.78, ancla: 'barco', pos: [150, 92, 140], mira: [10, 28, 0], fov: 46 },
     { t: 1.00, ancla: 'barco', pos: [236, 46, 96], mira: [40, 30, 0], fov: 50 },
   ],
+
+  /* CAPÍTULO 2 · LLEGADA A PUERTO
+     Se cambia de punto de vista: hasta aquí la cámara viajaba con el buque, y
+     ahora se planta en tierra y deja que el buque venga. Es el mismo recurso
+     que usa cualquier documental para decir «hemos llegado»: se deja de seguir
+     y se espera. */
   puerto: [
     { t: 0.00, ancla: 'barco', pos: [268, 52, 104], mira: [60, 30, 0], fov: 50 },
-    // Plano desde tierra: las grúas aparecen entre la bruma
-    { t: 0.42, ancla: 'mundo', pos: [205, 96, -12], mira: [40, 40, 96], fov: 44 },
+    { t: 0.42, ancla: 'mundo', pos: [205, 96, -12], mira: [40, 40, 96], fov: 44,
+      movil: { pos: [232, 118, -30], mira: [34, 34, 96], fov: 50 } },
     { t: 0.74, ancla: 'mundo', pos: [150, 62, 6], mira: [20, 30, 92], fov: 46 },
     { t: 1.00, ancla: 'mundo', pos: [96, 44, 26], mira: [24, 28, 92], fov: 48 },
   ],
+
+  /* CAPÍTULO 3 · DESCARGA
+     ---------------------------------------------------------------------
+     Un plano por cada momento de la operación, y cada uno elegido por lo que
+     tiene que DEJAR CLARO, no por lo vistoso que sea:
+     · el general de salida dice de dónde viene la carga;
+     · el corto sobre los twistlocks dice cómo se agarra;
+     · el contrapicado del despegue dice cuánto pesa;
+     · el perfil del traslado dice cuánto recorre;
+     · y el del apoyo dice dónde acaba.
+     Ninguna posición se repite y no hay dos consecutivas del mismo lado: la
+     cámara cruza el eje en cada corte, que es lo que impide que trece pasos se
+     confundan entre sí.
+
+     Y todos van APARTADOS de la estructura. El primer intento los puso encima
+     de la carga y la cámara acababa metida entre las celosías de la viga,
+     mirando el pórtico por dentro; el segundo los puso a cincuenta metros y el
+     contenedor quedaba de detalle. Doce metros de contenedor piden entre
+     quince y cuarenta de distancia, y ahí están todos menos el general. */
   grua: [
-    /* La cámara acompaña al contenedor toda la operación. Los planos van
-       APARTADOS de la estructura: el primer intento los puso justo encima de
-       la carga y la cámara acababa metida entre las celosías de la viga,
-       mirando el pórtico por dentro. */
-    /* Cerca. A cincuenta metros el contenedor era un detalle y el encuadre lo
-       mandaba el castillo del buque; el protagonista de este capítulo mide
-       doce metros y tiene que llenar el cuadro. Ninguna posición repetida:
-       tres cuartos alto, lateral corto, contrapicado, y seguimiento. */
-    { t: 0.00, ancla: 'contenedor', pos: [26, 9, 17], mira: [0, 0, 0], fov: 44 },
-    { t: 0.22, ancla: 'contenedor', pos: [17, 2.5, 12], mira: [0, 0, 0], fov: 46 },
-    { t: 0.42, ancla: 'contenedor', pos: [24, -6, 15], mira: [0, 2, 0], fov: 46 },
-    { t: 0.62, ancla: 'contenedor', pos: [28, 5, 5], mira: [0, -1, 0], fov: 44 },
-    { t: 0.82, ancla: 'contenedor', pos: [19, 4, 14], mira: [0, -1, 0], fov: 46 },
-    { t: 1.00, ancla: 'camion', pos: [24, 10, 22], mira: [0, 3.5, 0], fov: 46 },
+    // 1 · aproxima — general desde tierra: buque, grúa y carro saliendo
+    { t: 0.000, ancla: 'contenedor', pos: [46, 20, -58], mira: [0, -7, 8], fov: 42,
+      movil: { pos: [58, 26, -74], mira: [0, -10, 8], fov: 48 } },
+    // 2 · bajaVacio — se acerca mientras el spreader baja
+    { t: 0.075, ancla: 'contenedor', pos: [34, 16, -30], mira: [0, 12, 2], fov: 46,
+      movil: { pos: [42, 22, -38], mira: [0, 14, 2], fov: 52 } },
+    // 3 · alinea — al otro lado, cerca, a la altura de la carga
+    { t: 0.175, ancla: 'contenedor', pos: [-19, 7, 16], mira: [0, 6, 0], fov: 48 },
+    // 4/5 · posa y encaja — corto sobre la esquina: aquí se ve el agarre
+    { t: 0.270, ancla: 'contenedor', pos: [8.5, 3.4, 7], mira: [-1, 1.4, 0], fov: 48,
+      movil: { pos: [11, 4.2, 9], mira: [-1, 1.2, 0], fov: 52 } },
+    // 6 · tensa — se aparta un poco: nada se mueve, y eso hay que verlo entero
+    { t: 0.340, ancla: 'contenedor', pos: [-24, 10, -14], mira: [0, 8, 0], fov: 46 },
+    // 7 · despega — contrapicado: es el plano que cuenta las treinta toneladas
+    { t: 0.400, ancla: 'contenedor', pos: [16, -8, 13], mira: [0, 2.5, 0], fov: 46 },
+    // 8 · iza — sube con ella, por delante
+    { t: 0.470, ancla: 'contenedor', pos: [26, 4, -19], mira: [0, 7, 0], fov: 46 },
+    // 9 · traslada — perfil largo contra el buque: el recorrido se mide solo
+    { t: 0.580, ancla: 'contenedor', pos: [-40, 12, -18], mira: [0, 4, 0], fov: 42,
+      movil: { pos: [-50, 20, -24], mira: [0, 2, 0], fov: 48 } },
+    // 10 · frena — de frente y bajo: la carga se viene encima y vuelve
+    { t: 0.715, ancla: 'contenedor', pos: [11, -4, -26], mira: [0, 1, 0], fov: 46 },
+    // 11 · arria — desde arriba, viendo el remolque debajo
+    { t: 0.790, ancla: 'contenedor', pos: [23, 16, 18], mira: [0, -5, 0], fov: 46 },
+    // 12 · asienta — el apoyo, a la altura de la plataforma
+    { t: 0.900, ancla: 'camion', pos: [15, 4.2, 14], mira: [0, 3, 0], fov: 46 },
+    // 13 · suelta — se abre y el spreader se va hacia arriba, fuera de cuadro
+    { t: 1.000, ancla: 'camion', pos: [21, 7.5, 19], mira: [0, 3.6, 0], fov: 46 },
   ],
+
+  /* CAPÍTULO 4 · ADUANAS
+     El camión avanza hacia el escáner y para. La cámara hace lo contrario de
+     lo que pide el cuerpo: en vez de seguirle, se adelanta y le espera, que es
+     lo que convierte un avance en una LLEGADA. */
   aduanas: [
-    { t: 0.00, ancla: 'camion', pos: [23, 10, 24], mira: [0, 4, 0], fov: 46 },
-    { t: 0.38, ancla: 'camion', pos: [19, 6.5, 7], mira: [0, 4.2, -10], fov: 48 },
-    { t: 0.68, ancla: 'camion', pos: [16, 8.5, -15], mira: [0, 4.4, 2], fov: 44 },
-    { t: 1.00, ancla: 'camion', pos: [10, 6.2, -22], mira: [1, 4.6, 1], fov: 42 },
+    { t: 0.00, ancla: 'camion', pos: [21, 8, 22], mira: [0, 3.8, 0], fov: 46 },
+    { t: 0.38, ancla: 'camion', pos: [15, 5.5, -19], mira: [0, 3.6, 6], fov: 44,
+      movil: { pos: [19, 7.5, -25], mira: [0, 3.4, 6], fov: 50 } },
+    { t: 0.68, ancla: 'camion', pos: [-11, 6.8, -16], mira: [0, 3.6, 2], fov: 46 },
+    { t: 1.00, ancla: 'camion', pos: [9, 4.6, -21], mira: [1, 3.8, 3], fov: 44 },
   ],
+
+  /* CAPÍTULO 5 · SALIDA DEL RECINTO
+     Plano bajo junto a la rueda: es el que cuenta el peso del conjunto, y el
+     único de todo el recorrido a menos de dos metros del suelo. */
   salida: [
-    // Plano bajo junto a la rueda: es lo que cuenta el peso del conjunto
-    { t: 0.00, ancla: 'camion', pos: [7.5, 1.5, -15], mira: [1, 3.2, 2], fov: 44 },
-    { t: 0.45, ancla: 'camion', pos: [13, 4.4, -20], mira: [0, 4, 3], fov: 46 },
-    { t: 1.00, ancla: 'camion', pos: [17, 7.5, -26], mira: [0, 4.2, 6], fov: 46 },
+    { t: 0.00, ancla: 'camion', pos: [7.5, 1.4, -14], mira: [1, 3.2, 3], fov: 46 },
+    { t: 0.45, ancla: 'camion', pos: [-12, 4.2, -18], mira: [0, 3.6, 4], fov: 46 },
+    { t: 1.00, ancla: 'camion', pos: [16, 7, -24], mira: [0, 4, 6], fov: 46 },
   ],
+
+  /* CAPÍTULO 6 · EN RUTA
+     ---------------------------------------------------------------------
+     Aquí el problema no era el encuadre: era que no se notaba la VELOCIDAD.
+     Un camión a noventa por una recta vacía, filmado desde lejos y de lado, se
+     mueve por la pantalla igual de despacio que uno parado. La velocidad no la
+     da el objeto: la dan las cosas que le pasan cerca a la cámara.
+
+     Así que los planos de este capítulo están todos BAJOS y CERCA, con algo
+     entre la cámara y el horizonte: la rueda, el quitamiedos, el pórtico de
+     señalización, el tablero del paso superior. Lo que entra y sale de cuadro
+     en medio segundo es lo que se lee como noventa por hora. El único plano
+     alto dura poco y está justo para que se respire. */
   carretera: [
-    /* Cinco posiciones distintas, y ninguna repetida: rueda, lateral, trasera,
-       aérea y otra vez baja para el paso bajo el puente. */
-    { t: 0.00, ancla: 'camion', pos: [16, 7, -30], mira: [0, 4.2, 4], fov: 46 },
-    { t: 0.16, ancla: 'camion', pos: [5.6, 0.85, -2], mira: [1.5, 2.4, 8], fov: 52 },
-    { t: 0.36, ancla: 'camion', pos: [14, 3.6, 1], mira: [0, 3.4, 3], fov: 44 },
-    { t: 0.55, ancla: 'camion', pos: [1.5, 5.4, 26], mira: [0, 3.6, 2], fov: 42 },
-    { t: 0.74, ancla: 'camion', pos: [34, 56, 30], mira: [0, 3, -6], fov: 38 },
-    { t: 0.90, ancla: 'camion', pos: [12, 5.5, -22], mira: [0, 4, 4], fov: 46 },
-    { t: 1.00, ancla: 'camion', pos: [18, 9, -34], mira: [0, 4, 2], fov: 46 },
+    // Sale del ramal y coge la recta
+    { t: 0.00, ancla: 'camion', pos: [15, 6.4, -27], mira: [0, 4, 5], fov: 46 },
+    // A la altura del buje, rozando el asfalto
+    /* Este plano va MÁS ADENTRO de lo que pide la composición, a propósito.
+       La compensación de pantalla aleja la cámara por el eje de la mirada, y
+       desde 5,2 m de separación eso la sacaba por encima del quitamiedos —que
+       está a 7,4— en cuanto la pantalla era estrecha. Desde 3,4 aguanta el
+       retroceso máximo sin pasarse de la valla. */
+    { t: 0.14, ancla: 'camion', pos: [3.4, 0.9, -1], mira: [1.6, 2.2, 9], fov: 54,
+      movil: { pos: [3.9, 1.1, -2], mira: [1.4, 2.4, 9], fov: 58 } },
+    // Adelantado y bajo, con el quitamiedos barriendo el primer plano
+    { t: 0.30, ancla: 'camion', pos: [-9.5, 1.9, -17], mira: [0, 3.4, 4], fov: 50 },
+    // Persecución pegada, por detrás del semirremolque
+    { t: 0.46, ancla: 'camion', pos: [2.5, 4.6, 21], mira: [0, 3.6, 2], fov: 44 },
+    // El único alto del capítulo, y corto: la ruta desde fuera
+    { t: 0.62, ancla: 'camion', pos: [30, 48, 26], mira: [0, 2, -8], fov: 38,
+      movil: { pos: [38, 62, 34], mira: [0, 0, -8], fov: 44 } },
+    // Vuelve abajo para el paso superior: el tablero cruza sobre la cámara
+    { t: 0.80, ancla: 'camion', pos: [8.5, 2.6, -19], mira: [0, 4.2, 6], fov: 52 },
+    // Y otra vez a la rueda, ya frenando
+    { t: 1.00, ancla: 'camion', pos: [13, 5, -23], mira: [0, 4, 4], fov: 46 },
   ],
-  /* Ojo con los planos generales: es tentador plantar la cámara mirando al
+
+  /* CAPÍTULO 7 · CENTRO LOGÍSTICO
+     Ojo con los planos generales: es tentador plantar la cámara mirando al
      edificio, pero el camión sigue llegando y se queda fuera de cuadro —o
      peor, se mete por delante del objetivo—. Medido, uno de estos planos tenía
-     el camión a ciento once grados del eje. Van anclados al camión con un
-     desplazamiento amplio: el almacén entra en el encuadre solo, porque el
-     camión va hacia él. */
+     el camión a ciento once grados del eje.
+
+     Van todos anclados al camión con un desplazamiento amplio y con la mirada
+     ADELANTADA hacia donde el camión va: el almacén entra en el encuadre solo,
+     porque el camión va hacia él, y entra creciendo, que es la única forma de
+     que un edificio de ciento sesenta metros se lea como grande. */
   centro: [
-    { t: 0.00, ancla: 'camion', pos: [22, 11, -40], mira: [0, 5, 2], fov: 44 },
-    { t: 0.38, ancla: 'camion', pos: [52, 30, 62], mira: [-6, 2, -34], fov: 42 },
-    { t: 0.72, ancla: 'camion', pos: [30, 13, 34], mira: [-2, 2, -26], fov: 46 },
-    { t: 1.00, ancla: 'camion', pos: [20, 9.5, 26], mira: [0, 4.5, -4], fov: 46 },
+    { t: 0.00, ancla: 'camion', pos: [19, 9, -34], mira: [0, 4.5, 10], fov: 46 },
+    // Tres cuartos alto: se ve la nave entera por primera vez
+    { t: 0.34, ancla: 'camion', pos: [44, 26, 54], mira: [-10, 0, -46], fov: 42,
+      movil: { pos: [56, 34, 68], mira: [-12, -4, -46], fov: 48 } },
+    // Baja al patio y se mete entre el camión y los muelles de carga
+    { t: 0.66, ancla: 'camion', pos: [-16, 5.5, 12], mira: [2, 3.4, -22], fov: 48 },
+    // Maniobra final de aproximación al muelle asignado
+    { t: 1.00, ancla: 'camion', pos: [17, 8, 22], mira: [0, 4, -8], fov: 46 },
   ],
+
+  /* CAPÍTULO 8 · ENTREGA
+     El pago de todo el recorrido. Va de lo cerca a lo lejos, al revés que los
+     demás capítulos: se abren las puertas en primer plano, y desde ahí la
+     cámara se retira hasta dejar el conjunto —nave, patio, camión— pequeño en
+     el cuadro. Es un final, y un final se mira desde fuera. */
   entrega: [
-    { t: 0.00, ancla: 'camion', pos: [20, 9.5, 28], mira: [0, 4.5, -4], fov: 46 },
-    { t: 0.45, ancla: 'camion', pos: [26, 8, -30], mira: [0, 4.2, 4], fov: 44 },
-    { t: 0.78, ancla: 'camion', pos: [30, 15, -46], mira: [-2, 4, 6], fov: 42 },
-    { t: 1.00, ancla: 'camion', pos: [40, 32, -74], mira: [-4, 3, 12], fov: 40 },
+    { t: 0.00, ancla: 'camion', pos: [17, 8, 24], mira: [0, 4, -6], fov: 46 },
+    // Las puertas del contenedor, de frente
+    { t: 0.38, ancla: 'camion', pos: [-13, 3.6, 15], mira: [-2, 3, -2], fov: 48,
+      movil: { pos: [-16, 4.4, 19], mira: [-2, 3, -2], fov: 52 } },
+    { t: 0.72, ancla: 'camion', pos: [26, 13, -34], mira: [-4, 3, 8], fov: 42 },
+    { t: 1.00, ancla: 'camion', pos: [48, 34, -78], mira: [-8, 0, 14], fov: 40,
+      movil: { pos: [58, 44, -94], mira: [-8, -6, 14], fov: 46 } },
   ],
 };
 
@@ -519,20 +771,40 @@ export function mundoEn(p, ajustes) {
   };
 }
 
-/* Los planos, ordenados en una sola lista por progreso. */
-const CLAVES = [];
-for (const tramo of TRAMOS) {
-  const lista = PLANOS[tramo.id];
-  if (!lista) continue;
-  for (const plano of lista) {
-    CLAVES.push({
-      p: lerp(tramo.desde, tramo.hasta, plano.t),
-      pos: plano.pos, mira: plano.mira, fov: plano.fov,
-      ancla: plano.ancla || 'mundo',
-    });
+/**
+ * Los planos, enhebrados en UNA lista continua por progreso.
+ *
+ * Se construyen DOS listas, no una: la ancha y la estrecha. Un móvil en
+ * vertical no es un escritorio pequeño, es otra composición. La escena
+ * compensa por su cuenta el ángulo y la distancia —eso resuelve que el sujeto
+ * quepa—, pero hay planos en los que lo que cambia es la INTENCIÓN: un general
+ * que en apaisado enseña el buque de perfil, en vertical tiene que subir y
+ * abrirse para que el buque quepa de proa a popa; un contrapicado que en
+ * apaisado cabe justo, en vertical necesita separarse.
+ *
+ * Los planos que no declaran variante usan el mismo en las dos listas, así que
+ * sólo se escribe lo que de verdad cambia: doce de treinta y cinco.
+ */
+function enhebrar(estrecho) {
+  const claves = [];
+  for (const tramo of TRAMOS) {
+    const lista = PLANOS[tramo.id];
+    if (!lista) continue;
+    for (const plano of lista) {
+      const v = (estrecho && plano.movil) ? plano.movil : plano;
+      claves.push({
+        p: lerp(tramo.desde, tramo.hasta, plano.t),
+        pos: v.pos, mira: v.mira, fov: v.fov,
+        ancla: plano.ancla || 'mundo',
+      });
+    }
   }
+  claves.sort((a, b) => a.p - b.p);
+  return claves;
 }
-CLAVES.sort((a, b) => a.p - b.p);
+
+const CLAVES = enhebrar(false);
+const CLAVES_ESTRECHO = enhebrar(true);
 
 /* Planos coincidentes: el último de un capítulo y el primero del siguiente
    caen en el MISMO punto del recorrido. Si se dejan los dos y no dicen lo
@@ -548,19 +820,24 @@ CLAVES.sort((a, b) => a.p - b.p);
      promediar. Se descarta el SALIENTE y manda el entrante, de modo que el
      tramo anterior enhebra hasta él y el relevo de anclaje se reparte a lo
      largo de un tramo con anchura de verdad. */
-for (let i = CLAVES.length - 2; i >= 0; i--) {
-  if (CLAVES[i + 1].p - CLAVES[i].p > 1e-6) continue;
-  const a = CLAVES[i];
-  const b = CLAVES[i + 1];
-  if (a.ancla === b.ancla) {
-    a.pos = a.pos.map((v, k) => (v + b.pos[k]) / 2);
-    a.mira = a.mira.map((v, k) => (v + b.mira[k]) / 2);
-    a.fov = (a.fov + b.fov) / 2;
-    CLAVES.splice(i + 1, 1);
-  } else {
-    CLAVES.splice(i, 1);
+function fundirCoincidentes(claves) {
+  for (let i = claves.length - 2; i >= 0; i--) {
+    if (claves[i + 1].p - claves[i].p > 1e-6) continue;
+    const a = claves[i];
+    const b = claves[i + 1];
+    if (a.ancla === b.ancla) {
+      a.pos = a.pos.map((v, k) => (v + b.pos[k]) / 2);
+      a.mira = a.mira.map((v, k) => (v + b.mira[k]) / 2);
+      a.fov = (a.fov + b.fov) / 2;
+      claves.splice(i + 1, 1);
+    } else {
+      claves.splice(i, 1);
+    }
   }
+  return claves;
 }
+fundirCoincidentes(CLAVES);
+fundirCoincidentes(CLAVES_ESTRECHO);
 
 /**
  * Hermite cúbico con parametrización NO uniforme.
@@ -589,14 +866,15 @@ const hermite = (P0, P1, P2, P3, p0, p1, p2, p3, t) => {
  * La amortiguación NO va aquí: va en el bucle, sobre el resultado. Mezclar
  * las dos cosas es lo que hace que una página se desincronice al subir.
  */
-export function poseEn(p, salida = {}) {
-  const n = CLAVES.length;
+export function poseEn(p, salida = {}, estrecho = false) {
+  const lista = estrecho ? CLAVES_ESTRECHO : CLAVES;
+  const n = lista.length;
   let i = 0;
-  while (i < n - 2 && p > CLAVES[i + 1].p) i++;
-  const c1 = CLAVES[i];
-  const c2 = CLAVES[Math.min(n - 1, i + 1)];
-  const c0 = CLAVES[Math.max(0, i - 1)];
-  const c3 = CLAVES[Math.min(n - 1, i + 2)];
+  while (i < n - 2 && p > lista[i + 1].p) i++;
+  const c1 = lista[i];
+  const c2 = lista[Math.min(n - 1, i + 1)];
+  const c0 = lista[Math.max(0, i - 1)];
+  const c3 = lista[Math.min(n - 1, i + 2)];
   const t = c2.p > c1.p ? clamp((p - c1.p) / (c2.p - c1.p)) : 0;
 
   /* Nada de suavizar el parámetro dentro del tramo. Parece buena idea —«que

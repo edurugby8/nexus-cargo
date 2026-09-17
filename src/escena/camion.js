@@ -17,6 +17,7 @@ import * as THREE from 'three';
 import { MEDIDAS } from './ruta.js';
 import { clamp, lerp, damp } from '../lib/util.js';
 import { texturaChapa, texturaMancha } from './texturas.js';
+import { cristal } from './materiales.js';
 
 export function crearCamion({ caps }) {
   const grupo = new THREE.Group();
@@ -26,13 +27,11 @@ export function crearCamion({ caps }) {
   mapa.repeat.set(2, 2);
   const matCabina = new THREE.MeshStandardMaterial({ map: mapa, roughness: 0.42, metalness: 0.5 });
   const matChasis = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.62, metalness: 0.6 });
-  const matCristal = new THREE.MeshStandardMaterial({
-    color: 0x141c26, roughness: 0.12, metalness: 0.65, transparent: true, opacity: 0.86,
-  });
+  const matCristal = cristal(0x101a24);
   const matGoma = new THREE.MeshStandardMaterial({ color: 0x14171b, roughness: 0.95, metalness: 0.05 });
   const matLlanta = new THREE.MeshStandardMaterial({ color: 0x9aa2ab, roughness: 0.42, metalness: 0.8 });
   const matCromo = new THREE.MeshStandardMaterial({ color: 0xb9c2cb, roughness: 0.22, metalness: 0.95 });
-  aDesechar.push(mapa, matCabina, matChasis, matCristal, matGoma, matLlanta, matCromo);
+  aDesechar.push(mapa, matCabina, matChasis, matGoma, matLlanta, matCromo);
 
   /* ── Tractora ────────────────────────────────────────────────────
      Va en su propio grupo para poder cabecear sin arrastrar al remolque. */
@@ -45,30 +44,110 @@ export function crearCamion({ caps }) {
   chasis.castShadow = true;
   tractora.add(chasis);
 
-  const geoCab = new THREE.BoxGeometry(2.5, 2.5, 2.5);
+  /* La cabina, por PERFIL EXTRUIDO y no por cajas.
+     Una tractora europea es reconocible por su silueta lateral: frontal casi
+     vertical pero echado adelante, parabrisas muy inclinado, techo largo y
+     plano que cae hacia atrás. Con tres cajas apiladas eso no sale —salía un
+     cubo con un sombrero— y era lo que más «de bloques» hacía ver al camión en
+     los cinco capítulos en los que aparece.
+
+     Se dibuja el perfil una vez, en metros, y se extruye a lo ancho. Cuesta
+     una geometría y resuelve la silueta entera, que es lo único que se ve a
+     cincuenta metros. El bisel del extruido redondea las aristas: sin él,
+     cualquier canto vivo devuelve una línea blanca de un píxel que delata la
+     caja al instante. */
+  const perfil = new THREE.Shape();
+  perfil.moveTo(-1.28, 0.00);
+  perfil.lineTo(1.30, 0.00);
+  perfil.lineTo(1.42, 0.26);
+  perfil.lineTo(1.46, 1.02);           // frontal, ligeramente echado adelante
+  perfil.lineTo(1.34, 1.30);           // quiebro bajo el parabrisas
+  perfil.lineTo(0.66, 2.16);           // parabrisas, muy inclinado
+  perfil.quadraticCurveTo(0.42, 2.34, 0.10, 2.36);
+  perfil.lineTo(-0.98, 2.30);          // techo, cayendo hacia atrás
+  perfil.quadraticCurveTo(-1.26, 2.28, -1.28, 2.02);
+  perfil.closePath();
+
+  const geoCab = new THREE.ExtrudeGeometry(perfil, {
+    depth: 2.44, bevelEnabled: true, bevelThickness: 0.05,
+    bevelSize: 0.06, bevelSegments: 2, curveSegments: 6,
+  });
+  geoCab.translate(0, 0, -1.22);
+  geoCab.rotateY(Math.PI / 2);
   const cab = new THREE.Mesh(geoCab, matCabina);
-  cab.position.set(1.55, 2.45, 0);
+  cab.position.set(1.45, 1.2, 0);
   cab.castShadow = true;
   cab.receiveShadow = true;
   tractora.add(cab);
 
-  // Techo aerodinámico: sin él, una cabina es un cubo
-  const geoSpoiler = new THREE.BoxGeometry(2.3, 0.85, 2.4);
+  /* Deflector de techo. Va SEPARADO de la cabina y con un hueco visible entre
+     los dos, como el de verdad: ese hueco de quince centímetros es lo que
+     hace que se lea como una pieza añadida de plástico y no como parte de la
+     chapa. */
+  const geoSpoiler = new THREE.BoxGeometry(1.85, 0.62, 2.36);
   const spoiler = new THREE.Mesh(geoSpoiler, matCabina);
-  spoiler.position.set(1.1, 3.9, 0);
+  spoiler.position.set(0.86, 3.86, 0);
   spoiler.castShadow = true;
   tractora.add(spoiler);
+  const geoAleta = new THREE.BoxGeometry(1.85, 0.72, 0.07);
+  for (const s of [-1, 1]) {
+    const a = new THREE.Mesh(geoAleta, matCabina);
+    a.position.set(0.86, 3.7, s * 1.2);
+    tractora.add(a);
+  }
 
-  const geoParabrisas = new THREE.BoxGeometry(0.14, 1.25, 2.2);
+  /* Cristales. Opacos y muy reflectantes, no transparentes: una cabina a plena
+     luz es un espejo oscuro, y hacerla translúcida obliga a modelar un interior
+     que nadie mira y deja ver el paisaje a través del camión. */
+  const geoParabrisas = new THREE.BoxGeometry(1.12, 0.06, 2.12);
   const parabrisas = new THREE.Mesh(geoParabrisas, matCristal);
-  parabrisas.position.set(2.78, 2.9, 0);
+  parabrisas.position.set(2.45, 2.62, 0);
+  parabrisas.rotation.z = -Math.atan2(0.86, 0.68) + Math.PI / 2;
   tractora.add(parabrisas);
-  const geoVentanilla = new THREE.BoxGeometry(1.5, 1, 0.1);
+  const geoVentanilla = new THREE.BoxGeometry(1.25, 0.86, 0.06);
   for (const s of [-1, 1]) {
     const v = new THREE.Mesh(geoVentanilla, matCristal);
-    v.position.set(1.5, 2.85, s * 1.27);
+    v.position.set(1.42, 2.78, s * 1.235);
     tractora.add(v);
   }
+
+  /* Visera y retrovisores: dos piezas pequeñas que rompen la silueta por
+     arriba y por los lados. Sin ellas la cabina se lee como maqueta. */
+  const geoVisera = new THREE.BoxGeometry(0.34, 0.1, 2.44);
+  const visera = new THREE.Mesh(geoVisera, matChasis);
+  visera.position.set(2.18, 3.42, 0);
+  visera.rotation.z = 0.24;
+  tractora.add(visera);
+  const geoBrazo = new THREE.CylinderGeometry(0.035, 0.035, 0.52, 6);
+  const geoEspejo = new THREE.BoxGeometry(0.09, 0.62, 0.22);
+  for (const s of [-1, 1]) {
+    const b = new THREE.Mesh(geoBrazo, matChasis);
+    b.rotation.x = Math.PI / 2;
+    b.position.set(2.15, 3.1, s * 1.48);
+    tractora.add(b);
+    const e = new THREE.Mesh(geoEspejo, matChasis);
+    e.position.set(2.15, 2.82, s * 1.72);
+    e.castShadow = true;
+    tractora.add(e);
+  }
+
+  /* Estribos y guardabarros. Es lo que hay entre la rueda y la puerta, y su
+     ausencia deja un hueco negro que se ve desde cualquier plano bajo —y en
+     este recorrido hay tres. */
+  const geoEstribo = new THREE.BoxGeometry(0.5, 0.06, 0.62);
+  const geoGuarda = new THREE.BoxGeometry(1.5, 0.12, 0.5);
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 2; i++) {
+      const e = new THREE.Mesh(geoEstribo, matChasis);
+      e.position.set(1.58, 0.62 + i * 0.42, s * 1.3);
+      tractora.add(e);
+    }
+    const g = new THREE.Mesh(geoGuarda, matChasis);
+    g.position.set(2.1, 1.02, s * 1.15);
+    tractora.add(g);
+  }
+  aDesechar.push(geoSpoiler, geoAleta, geoParabrisas, geoVentanilla, geoVisera,
+    geoBrazo, geoEspejo, geoEstribo, geoGuarda);
 
   // Parachoques, rejilla y depósito
   const geoParachoques = new THREE.BoxGeometry(0.4, 0.6, 2.5);
@@ -88,8 +167,7 @@ export function crearCamion({ caps }) {
   tubo.position.set(0.15, 2.6, -1.35);
   tubo.castShadow = true;
   tractora.add(tubo);
-  aDesechar.push(geoChasis, geoCab, geoSpoiler, geoParabrisas, geoVentanilla,
-    geoParachoques, geoDeposito, geoTubo);
+  aDesechar.push(geoChasis, geoCab, geoParachoques, geoDeposito, geoTubo);
 
   /* ── Semirremolque ───────────────────────────────────────────────
      Un chasis portacontenedores: sólo largueros y traviesas. El contenedor NO

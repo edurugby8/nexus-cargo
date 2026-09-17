@@ -18,12 +18,21 @@ import { texturaChapa } from './texturas.js';
 
 const G = MEDIDAS.grua;
 
-/** Celosía: dos cordones y sus diagonales. Barata y se lee a un kilómetro. */
+/**
+ * Celosía: dos cordones y sus diagonales. Barata y se lee a un kilómetro.
+ *
+ * Los cordones medían medio metro. En una viga de ciento cuatro metros eso es
+ * un hilo: a la distancia a la que se ve la grúa quedaban en menos de un píxel
+ * y el pórtico se leía como un dibujo de alambre flotando sobre el puerto, no
+ * como ocho mil toneladas de acero. El cordón de una viga cajón de este
+ * tamaño anda por el metro y medio, y con esa medida la estructura por fin
+ * pesa.
+ */
 function celosia(largo, canto, tramos, material, eje = 'x') {
   const grupo = new THREE.Group();
   const geoCordon = eje === 'x'
-    ? new THREE.BoxGeometry(largo, 0.5, 0.5)
-    : new THREE.BoxGeometry(0.5, largo, 0.5);
+    ? new THREE.BoxGeometry(largo, 1.5, 1.5)
+    : new THREE.BoxGeometry(1.5, largo, 1.5);
   for (const s of [-1, 1]) {
     const c = new THREE.Mesh(geoCordon, material);
     if (eje === 'x') c.position.y = s * canto / 2; else c.position.x = s * canto / 2;
@@ -32,7 +41,7 @@ function celosia(largo, canto, tramos, material, eje = 'x') {
   }
   const paso = largo / tramos;
   const diag = Math.hypot(paso, canto);
-  const geoDiag = new THREE.BoxGeometry(diag, 0.3, 0.3);
+  const geoDiag = new THREE.BoxGeometry(diag, 0.65, 0.65);
   for (let i = 0; i < tramos; i++) {
     const d = new THREE.Mesh(geoDiag, material);
     const centro = -largo / 2 + paso * (i + 0.5);
@@ -62,7 +71,7 @@ export function crearGrua({ x, activa = false, caps }) {
   aDesechar.push(mapa, matEstructura, matAcento, matOscuro);
 
   // Patas del pórtico: cuatro, a ambos lados de la vía
-  const geoPata = new THREE.BoxGeometry(1.7, G.alto - 20, 1.7);
+  const geoPata = new THREE.BoxGeometry(2.6, G.alto - 20, 2.6);
   aDesechar.push(geoPata);
   const zPata = [MEDIDAS.muelle - 4, MEDIDAS.muelle - 4 - G.via];
   for (const z of zPata) {
@@ -82,7 +91,7 @@ export function crearGrua({ x, activa = false, caps }) {
   }
 
   // Travesaños entre patas
-  const geoTrav = new THREE.BoxGeometry(16, 1.2, 1.2);
+  const geoTrav = new THREE.BoxGeometry(16, 1.9, 1.9);
   aDesechar.push(geoTrav);
   for (const z of zPata) {
     for (const y of [G.alto - 24, (G.alto - 20) * 0.45]) {
@@ -95,7 +104,7 @@ export function crearGrua({ x, activa = false, caps }) {
   // Viga superior: del voladizo sobre el agua a la retro sobre tierra
   const largoViga = G.voladizo + G.retro;
   const centroViga = MEDIDAS.muelle - 4 + G.voladizo / 2 - G.retro / 2 + 6;
-  const viga = celosia(largoViga, 3.4, 22, matEstructura, 'x');
+  const viga = celosia(largoViga, 5.2, 22, matEstructura, 'x');
   viga.rotation.y = Math.PI / 2;
   viga.position.set(0, G.alto - 19, centroViga);
   grupo.add(viga);
@@ -103,7 +112,7 @@ export function crearGrua({ x, activa = false, caps }) {
 
   // Tirantes desde la torre a los extremos de la viga
   const torreAlto = G.alto;
-  const geoTorre = new THREE.BoxGeometry(1.3, 20, 1.3);
+  const geoTorre = new THREE.BoxGeometry(2.1, 20, 2.1);
   aDesechar.push(geoTorre);
   for (const dx of [-7, 7]) {
     const t = new THREE.Mesh(geoTorre, matEstructura);
@@ -113,7 +122,7 @@ export function crearGrua({ x, activa = false, caps }) {
   }
   const tirante = (z1, z2) => {
     const largo = Math.hypot(z2 - z1, 20);
-    const geo = new THREE.BoxGeometry(0.55, largo, 0.55);
+    const geo = new THREE.BoxGeometry(0.95, largo, 0.95);
     aDesechar.push(geo);
     for (const dx of [-7, 7]) {
       const m = new THREE.Mesh(geo, matEstructura);
@@ -207,7 +216,17 @@ export function crearGrua({ x, activa = false, caps }) {
     const yViga = G.alto - 21;
     carro.position.set(0, yViga, g.carroZ);
     cabina.position.set(5.5, yViga - 3.4, g.carroZ);
-    spreader.position.set(0, g.spreaderY + 1.75, g.contenedor ? g.contenedor.z : g.carroZ);
+    /* El spreader va por ENCIMA de la tapa del contenedor, no dentro.
+       Estaba a 1,75 m del centro de la carga, y la tapa de un High Cube está a
+       1,448: las vigas del bastidor quedaban clavadas en el techo y el
+       spreader no se veía en ningún plano de la descarga. Justo la pieza que
+       explica cómo se agarra la carga. */
+    const yTapa = MEDIDAS.contenedor.alto / 2;
+    spreader.position.set(
+      MEDIDAS.gruaX + (g.desvio || 0) - grupo.position.x,
+      g.spreaderY + yTapa + 0.46,
+      g.contenedor ? g.contenedor.z : g.carroZ,
+    );
     // El spreader se ladea con la carga: cuelga, no está atornillado
     spreader.rotation.x = clamp((spreader.position.z - g.carroZ) * 0.03, -0.12, 0.12);
     spreader.userData.locks.forEach((l) => { l.rotation.y = g.cerrado * Math.PI / 2; });

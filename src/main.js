@@ -83,7 +83,7 @@ if (caps.webgl && lienzo) {
       alProgreso(p, cap, mundo, cambio) {
         marcarAvance(p);
         if (cambio) marcarCapitulo(cap.capitulo.id);
-        refrescarHud(cap.capitulo.id, mundo);
+        refrescarHud(cap.capitulo.id, mundo, cap.local);
         sonido.actualizar(p, mundo.camion.marcha);
       },
       alPintar: () => setTimeout(cerrarCarga, reducido ? 0 : 200),

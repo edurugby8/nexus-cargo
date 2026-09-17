@@ -10,7 +10,7 @@
  *
  *   node pruebas-guion.mjs
  */
-import { poseEn, mundoEn, TRAMOS, NUM_PLANOS, ALTURAS, capituloEn } from './src/escena/ruta.js';
+import { poseEn, mundoEn, TRAMOS, NUM_PLANOS, ALTURAS, capituloEn, PASOS_GRUA } from './src/escena/ruta.js';
 
 let fallos = 0;
 const mal = (m) => { console.log('  ✗', m); fallos++; };
@@ -88,10 +88,58 @@ for (let i = 0; i <= 1200; i++) {
 }
 // El último punto del muestreo ya cae en el capítulo siguiente, donde la
 // grúa está en «hecho». Eso es correcto, no un fallo.
-const esperado = ['bajaVacio','encaja','tensa','iza','traslada','arria','suelta','hecho'];
+const esperado = [...PASOS_GRUA, 'hecho'];
 JSON.stringify(fases) === JSON.stringify(esperado)
-  ? ok(`la descarga recorre sus 7 fases en orden`)
-  : mal(`fases: ${fases.join(' → ')}`);
+  ? ok(`la descarga recorre sus ${PASOS_GRUA.length} pasos en orden`)
+  : mal(`pasos: ${fases.join(' → ')}`);
+
+/* 6b · Y los recorre SIN SALTOS.
+   Trece pasos encadenados a mano son trece sitios donde un tramo puede empezar
+   donde no acabó el anterior, y cada uno de esos desajustes es un salto
+   visible de la carga.
+
+   La forma ingenua de comprobarlo —«que entre dos muestras no se mueva más de
+   X»— no vale, y merece la pena explicar por qué: un tramo que sube deprisa da
+   pasos grandes sin tener ninguna discontinuidad, así que el umbral acaba
+   midiendo la VELOCIDAD en vez de la continuidad, y o deja pasar saltos
+   pequeños o suspende movimientos legítimos.
+
+   Lo que distingue de verdad un salto de un movimiento rápido es cómo se
+   comportan al MUESTREAR MÁS FINO: un movimiento continuo reparte el recorrido
+   entre el doble de muestras y su paso máximo se reduce a la mitad; una
+   discontinuidad sigue midiendo lo mismo por muchas muestras que se tomen. Así
+   que se mide dos veces, a N y a 2N, y se compara. */
+function mayorPaso(N) {
+  let dy = 0;
+  let dz = 0;
+  let donde = 0;
+  let previo = mundoEn(TRAMOS[2].desde).grua;
+  for (let i = 1; i <= N; i++) {
+    const p = TRAMOS[2].desde + (TRAMOS[2].hasta - TRAMOS[2].desde) * (i / N);
+    const g = mundoEn(p).grua;
+    if (g.fase === 'hecho') break;
+    const ay = Math.abs(g.spreaderY - previo.spreaderY);
+    const az = Math.abs(g.carroZ - previo.carroZ);
+    if (ay > dy) { dy = ay; donde = p; }
+    if (az > dz) dz = az;
+    previo = g;
+  }
+  return { dy, dz, donde };
+}
+const grueso = mayorPaso(2000);
+const fino = mayorPaso(4000);
+// Al doblar las muestras, un movimiento continuo reduce su paso a ~la mitad
+const razonY = fino.dy / Math.max(1e-9, grueso.dy);
+const razonZ = fino.dz / Math.max(1e-9, grueso.dz);
+(razonY < 0.62 && razonZ < 0.62)
+  ? ok(`la carga se mueve sin discontinuidades (al doblar el muestreo el paso cae a ${(razonY * 100).toFixed(0)} % en altura y ${(razonZ * 100).toFixed(0)} % en carro)`)
+  : mal(`discontinuidad en la secuencia: al doblar el muestreo el paso sólo cae a ${(razonY * 100).toFixed(0)} % / ${(razonZ * 100).toFixed(0)} % (peor en p=${fino.donde.toFixed(4)})`);
+
+/* Y, aparte, un techo de velocidad: sin discontinuidades pero con un tramo que
+   recorra cincuenta metros en un parpadeo, la operación tampoco se entiende. */
+(fino.dy < 0.5 && fino.dz < 0.5)
+  ? ok(`ningún tramo va demasiado rápido (máx. ${fino.dy.toFixed(2)} m de gancho y ${fino.dz.toFixed(2)} m de carro por muestra)`)
+  : mal(`tramo demasiado rápido: ${fino.dy.toFixed(2)} m de gancho, ${fino.dz.toFixed(2)} m de carro en p=${fino.donde.toFixed(4)}`);
 
 // 7 · El contenedor acaba sobre el remolque, a la altura correcta
 const tras = mundoEn(TRAMOS[3].desde + 0.005).grua;
@@ -113,14 +161,39 @@ huecos === 0 ? ok('todo progreso cae en un capítulo') : mal(`${huecos} huecos`)
 // apuntaba a un trozo de asfalto vacío. Se comprueba el ángulo entre la
 // dirección de la cámara y el objetivo, contra el medio campo de visión.
 {
-  const enc = (p, punto) => {
+  /* El criterio, corregido.
+     La versión anterior medía el ángulo hasta UN PUNTO y lo comparaba con el
+     semiángulo VERTICAL por 1,9. Dos cosas mal: el encuadre real es más ancho
+     que alto —el semiángulo que manda es el horizontal—, y un camión de 16,5
+     metros a veinte de distancia no es un punto: abarca casi veinticinco
+     grados por sí solo. Con el criterio viejo, un plano que enseña el camión
+     entero llenando el cuadro se contaba como «fuera de cuadro».
+
+     Ahora se resta el RADIO ANGULAR del sujeto, que es lo que de verdad
+     determina si asoma o no, y se compara con el semiángulo horizontal a la
+     relación de referencia. Sigue siendo una comprobación de escritorio y
+     aproximada; la fina, con la caja envolvente proyectada de verdad y en tres
+     pantallas, está en `pruebas-encuadre.mjs`. */
+  const ASPECTO_REF = 1.6;
+  const enc = (p, punto, radio) => {
     poseEn(p, pos);
     const d = [punto[0]-pos.pos[0], punto[1]-pos.pos[1], punto[2]-pos.pos[2]];
     const v = [pos.mira[0]-pos.pos[0], pos.mira[1]-pos.pos[1], pos.mira[2]-pos.pos[2]];
     const ld = Math.hypot(...d), lv = Math.hypot(...v);
     const cos = (d[0]*v[0]+d[1]*v[1]+d[2]*v[2])/(ld*lv);
-    return { ang: Math.acos(Math.max(-1,Math.min(1,cos)))*180/Math.PI, dist: ld, semi: pos.fov/2 };
+    const ang = Math.acos(Math.max(-1,Math.min(1,cos)))*180/Math.PI;
+    const semiV = pos.fov/2 * Math.PI/180;
+    const semiH = Math.atan(Math.tan(semiV) * ASPECTO_REF) * 180/Math.PI;
+    // Cuánto abarca el propio sujeto desde donde está la cámara
+    const propio = Math.atan(radio / Math.max(1, ld)) * 180/Math.PI;
+    return { asoma: ang - propio, semi: semiH, dist: ld };
   };
+
+  /** Radio del conjunto tractora + semirremolque cargado. */
+  const RADIO_CAMION = 9.0;
+  /** Radio de un contenedor de 40 pies. */
+  const RADIO_CONTENEDOR = 6.3;
+
   const tramos = [['aduanas',3],['salida',4],['carretera',5],['centro',6],['entrega',7]];
   let fuera = 0, peorAng = 0, peorEn = '';
   for (const [nombre, i] of tramos) {
@@ -129,10 +202,8 @@ huecos === 0 ? ok('todo progreso cae en un capítulo') : mal(`${huecos} huecos`)
       const p = T.desde + (T.hasta - T.desde) * (k/300);
       const m = mundoEn(p);
       // Centro del conjunto tractora + remolque, a media altura
-      const r = enc(p, [20, 3, m.camion.z + 5]);
-      // El horizontal es más ancho que el vertical: se usa el semiángulo
-      // vertical con margen, que es el criterio estricto
-      if (r.ang > r.semi * 1.9) { fuera++; if (r.ang > peorAng) { peorAng = r.ang; peorEn = nombre; } }
+      const r = enc(p, [20, 3, m.camion.z + 5], RADIO_CAMION);
+      if (r.asoma > r.semi) { fuera++; if (r.asoma > peorAng) { peorAng = r.asoma; peorEn = nombre; } }
     }
   }
   fuera === 0
@@ -146,8 +217,8 @@ huecos === 0 ? ok('todo progreso cae en un capítulo') : mal(`${huecos} huecos`)
     const p = G.desde + (G.hasta - G.desde) * (k/400);
     const c = mundoEn(p).grua.contenedor;
     if (!c) continue;
-    const r = enc(p, [c.x, c.y, c.z]);
-    if (r.ang > r.semi * 1.9) { fuera2++; peor2 = Math.max(peor2, r.ang); }
+    const r = enc(p, [c.x, c.y, c.z], RADIO_CONTENEDOR);
+    if (r.asoma > r.semi) { fuera2++; peor2 = Math.max(peor2, r.asoma); }
   }
   fuera2 === 0
     ? ok('el contenedor no se sale del encuadre durante toda la descarga')

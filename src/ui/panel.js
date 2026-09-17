@@ -127,13 +127,23 @@ export function montarPanel(escena) {
   desliz('suspension', 'Suspensión', 0, 2.2, 0.02);
   desliz('trafico', 'Tráfico secundario', 0, 2, 0.02);
 
-  seccion('Cámara y aire');
+  seccion('Cámara y encuadre');
   desliz('distanciaCamara', 'Distancia de cámara', 0.6, 1.6, 0.02);
+  /* Los dos mandos de la compensación de pantalla. Se ven mejor que en ningún
+     sitio estrechando la ventana: a 0 de retroceso y con el tope de ángulo
+     bajo, en vertical se pierde medio encuadre, que es lo que pasaba antes. */
+  desliz('fovMaximo', 'Tope de ángulo vertical', 46, 80, 1, (v) => `${v.toFixed(0)}°`);
+  desliz('retrocesoMaximo', 'Retroceso máximo', 1, 3, 0.05, (v) => `×${v.toFixed(2)}`);
+
+  seccion('Luz y aire');
   desliz('niebla', 'Niebla', 0, 2.5, 0.02);
   desliz('luz', 'Intensidad de luz', 0.3, 2, 0.02);
   desliz('exposicion', 'Exposición', 0.5, 1.6, 0.02);
   desliz('particulas', 'Partículas', 0, 2, 0.02);
   desliz('detalle', 'Nivel de detalle', 0.2, 1.6, 0.02);
+  desliz('giroSol', 'Giro del sol por capítulos', 0, 1.6, 0.02);
+  desliz('rebote', 'Rebote del cielo', 0.2, 2, 0.02);
+  desliz('relleno', 'Luz de relleno', 0, 2.2, 0.02);
 
   /* Configuraciones comparables. La pública es UNA sola —«equilibrada»—; las
      otras tres están para ver de un vistazo qué cambia cada familia. */

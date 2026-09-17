@@ -14,6 +14,9 @@ import { crearPilas } from './contenedor.js';
 import {
   texturaHormigon, texturaAsfalto, texturaChapa, texturaNave, texturaMancha,
 } from './texturas.js';
+import {
+  aceroPintado, aceroDesnudo, hormigon, pintura, luminoso, cristal, relieveAsfalto,
+} from './materiales.js';
 
 /* ── Muelle y explanada de la terminal ────────────────────────────── */
 
@@ -263,19 +266,55 @@ export function crearCarretera({ caps }) {
   const desde = MEDIDAS.barrera + 6;
   const hasta = MEDIDAS.destino - 240;
   const largo = desde - hasta;
+  const centroZ = (desde + hasta) / 2;
+
+  /* ── POR QUÉ NO SE NOTABA LA VELOCIDAD ────────────────────────────
+     El camión recorre quinientos metros en este capítulo, y a un ritmo de
+     lectura normal eso son bastante más de cien metros por segundo. La
+     velocidad estaba; lo que no había era CONTRA QUÉ medirla.
+
+     La calzada era un plano gris con unas rayas sueltas cada varios metros, el
+     terreno un plano pardo hasta el horizonte y el quitamiedos venía en
+     segmentos de 4,2 m colocados cada 6,3: una valla rota, con hueco entre
+     pieza y pieza. Nada de eso pasa lo bastante cerca ni lo bastante seguido.
+
+     La velocidad no la da el vehículo: la dan las cosas que le pasan al lado.
+     Es la misma lección de las hojas cercanas de Umbría, trasladada aquí. Así
+     que ahora hay, por orden de lo que más se nota:
+
+       · marcas viales al paso de verdad —raya de 5 m, vano de 12— que cruzan
+         el cuadro entero en los planos bajos;
+       · quitamiedos CONTINUO, con el poste cada 4 m: a esta marcha, un poste
+         cada dieciséis centésimas. Es un estroboscopio;
+       · hitos de arista cada 12 m, más cerca todavía que el quitamiedos;
+       · cuatro pórticos de señalización en vez de cinco carteles sueltos, y un
+         paso superior: cada estructura por la que se pasa por debajo es un
+         golpe de luz instantáneo;
+       · y un talud con pendiente en lugar de un plano, para que el borde de la
+         calzada tenga un canto que corra.
+     Nada de esto es decorado: todo está puesto por el ritmo al que cruza. */
 
   const mapa = texturaAsfalto();
-  const matAsfalto = new THREE.MeshStandardMaterial({ map: mapa, roughness: 0.92, metalness: 0.03 });
-  const matTierra = new THREE.MeshStandardMaterial({ color: 0x4a4636, roughness: 0.98 });
-  const matGuardarrail = new THREE.MeshStandardMaterial({ color: 0xa9b1b8, roughness: 0.48, metalness: 0.7 });
+  const matAsfalto = new THREE.MeshStandardMaterial({
+    map: mapa, roughness: 0.9, metalness: 0.03,
+    normalMap: relieveAsfalto(), normalScale: new THREE.Vector2(0.8, 0.8),
+  });
+  const matTierra = new THREE.MeshStandardMaterial({ color: 0x5c5742, roughness: 0.98 });
+  const matTalud = new THREE.MeshStandardMaterial({ color: 0x6a6249, roughness: 0.97 });
+  const matGuardarrail = aceroDesnudo(0xaeb6bd, 0.44);
   const matPoste = new THREE.MeshStandardMaterial({ color: 0x585e66, roughness: 0.7, metalness: 0.4 });
-  const matVerde = new THREE.MeshStandardMaterial({ color: 0x3c5236, roughness: 0.95 });
-  aDesechar.push(mapa, matAsfalto, matTierra, matGuardarrail, matPoste, matVerde);
+  const matVerde = new THREE.MeshStandardMaterial({ color: 0x40563a, roughness: 0.95 });
+  const matMarca = pintura(0xe8ece9);
+  aDesechar.push(mapa, matAsfalto, matTierra, matTalud, matPoste, matVerde);
 
+  const dummy = new THREE.Object3D();
+  const cuantos = Math.round(caps.carretera);
+
+  /* ── Calzada ────────────────────────────────────────────────────── */
   const geoCalzada = new THREE.PlaneGeometry(13, largo);
   const calzada = new THREE.Mesh(geoCalzada, matAsfalto);
   calzada.rotation.x = -Math.PI / 2;
-  calzada.position.set(X, 0.02, (desde + hasta) / 2);
+  calzada.position.set(X, 0.02, centroZ);
   calzada.receiveShadow = true;
   grupo.add(calzada);
   aDesechar.push(geoCalzada);
@@ -286,33 +325,79 @@ export function crearCarretera({ caps }) {
   const geoArcen = new THREE.PlaneGeometry(800, largo);
   const arcen = new THREE.Mesh(geoArcen, matTierra);
   arcen.rotation.x = -Math.PI / 2;
-  arcen.position.set(X, -0.02, (desde + hasta) / 2);
+  arcen.position.set(X, -1.15, centroZ);
   arcen.receiveShadow = true;
   grupo.add(arcen);
   aDesechar.push(geoArcen);
 
-  /* Mobiliario instanciado.
-     Es lo que cuenta la velocidad: pasa cerca, pasa rápido y pasa seguido.
-     Es la lección de las hojas cercanas de Umbría trasladada a la carretera —
-     lo que da sensación de marcha no es el vehículo, es lo que le pasa al
-     lado—. */
-  const dummy = new THREE.Object3D();
-  const cuantos = Math.round(caps.carretera);
+  /* Talud: la calzada va en terraplén y el terreno cae a los lados. Es un
+     plano inclinado por banda, y cambia mucho más de lo que cuesta: el borde
+     del asfalto pasa a tener CANTO, y un canto que corre se lee como marcha.
+     Con el terreno a la misma cota que la carretera no hay borde que correr. */
+  const geoTalud = new THREE.PlaneGeometry(4.2, largo);
+  for (const s of [-1, 1]) {
+    const t = new THREE.Mesh(geoTalud, matTalud);
+    t.rotation.x = -Math.PI / 2;
+    t.rotation.y = s * 0.28;
+    t.position.set(X + s * 8.4, -0.55, centroZ);
+    t.receiveShadow = true;
+    grupo.add(t);
+  }
+  aDesechar.push(geoTalud);
 
-  const geoPosteRail = new THREE.BoxGeometry(0.12, 0.8, 0.12);
-  const geoRail = new THREE.BoxGeometry(0.06, 0.32, 4.2);
-  aDesechar.push(geoPosteRail, geoRail);
-  const rails = new THREE.InstancedMesh(geoRail, matGuardarrail, cuantos * 2);
-  const postes = new THREE.InstancedMesh(geoPosteRail, matPoste, cuantos * 2);
+  /* ── Marcas viales ───────────────────────────────────────────────
+     La raya discontinua de una carretera convencional mide 5 m con vanos de
+     12. Esas cifras no son decorativas: son EL reloj de la escena. A cien
+     metros por segundo pasa una raya cada diecisiete centésimas, y eso es lo
+     que el ojo integra como velocidad. Antes las rayas iban cada varios metros
+     sin relación con nada y el efecto no aparecía. */
+  const PASO_RAYA = 17;
+  const rayas = Math.min(700, Math.floor(largo / PASO_RAYA));
+  const geoRaya = new THREE.PlaneGeometry(0.15, 5);
+  const mallaRaya = new THREE.InstancedMesh(geoRaya, matMarca, rayas);
+  for (let i = 0; i < rayas; i++) {
+    dummy.position.set(X, 0.045, desde - i * PASO_RAYA);
+    dummy.rotation.set(-Math.PI / 2, 0, 0);
+    dummy.scale.setScalar(1);
+    dummy.updateMatrix();
+    mallaRaya.setMatrixAt(i, dummy.matrix);
+  }
+  mallaRaya.frustumCulled = false;
+  grupo.add(mallaRaya);
+  aDesechar.push(geoRaya);
+
+  // Líneas de borde, continuas, una a cada lado
+  const geoBorde = new THREE.PlaneGeometry(0.18, largo);
+  for (const s of [-1, 1]) {
+    const b = new THREE.Mesh(geoBorde, matMarca);
+    b.rotation.x = -Math.PI / 2;
+    b.position.set(X + s * 6.1, 0.045, centroZ);
+    grupo.add(b);
+  }
+  aDesechar.push(geoBorde);
+
+  /* ── Quitamiedos, CONTINUO ───────────────────────────────────────
+     El segmento mide exactamente lo que el paso, así que la valla no tiene
+     huecos. Antes medía 4,2 m y se colocaba cada 6,3: dos metros de aire entre
+     pieza y pieza, y a velocidad eso no se lee como una valla, se lee como una
+     fila de cosas. El poste cada 4 metros es lo que de verdad parpadea. */
+  const PASO_RAIL = Math.max(3.4, largo / cuantos);
+  const tramos = Math.min(620, Math.floor(largo / PASO_RAIL));
+  const geoRail = new THREE.BoxGeometry(0.07, 0.34, PASO_RAIL);
+  const geoPosteRail = new THREE.BoxGeometry(0.11, 0.9, 0.13);
+  aDesechar.push(geoRail, geoPosteRail);
+  const rails = new THREE.InstancedMesh(geoRail, matGuardarrail, tramos * 2);
+  const postes = new THREE.InstancedMesh(geoPosteRail, matPoste, tramos * 2);
   let n = 0;
-  for (let i = 0; i < cuantos; i++) {
-    const z = desde - (i / cuantos) * largo;
+  for (let i = 0; i < tramos; i++) {
+    const z = desde - i * PASO_RAIL;
     for (const s of [-1, 1]) {
-      dummy.position.set(X + s * 7.6, 0.92, z);
       dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(1);
+      dummy.position.set(X + s * 7.4, 0.88, z);
       dummy.updateMatrix();
       rails.setMatrixAt(n, dummy.matrix);
-      dummy.position.y = 0.4;
+      dummy.position.set(X + s * 7.4, 0.44, z - PASO_RAIL / 2);
       dummy.updateMatrix();
       postes.setMatrixAt(n, dummy.matrix);
       n++;
@@ -323,17 +408,48 @@ export function crearCarretera({ caps }) {
   rails.frustumCulled = postes.frustumCulled = false;
   grupo.add(rails, postes);
 
+  /* Hitos de arista: el elemento más cercano de todos y el que más veces pasa.
+     Van con su banda reflectante, que en los planos bajos se enciende al
+     recibir el sol rasante. */
+  const PASO_HITO = 12;
+  const hitos = Math.min(400, Math.floor(largo / PASO_HITO));
+  const geoHito = new THREE.BoxGeometry(0.1, 1.05, 0.13);
+  const geoBanda = new THREE.BoxGeometry(0.11, 0.2, 0.14);
+  const matBanda = pintura(0xf2f4ee);
+  aDesechar.push(geoHito, geoBanda);
+  const mallaHito = new THREE.InstancedMesh(geoHito, matMarca, hitos * 2);
+  const mallaBanda = new THREE.InstancedMesh(geoBanda, matBanda, hitos * 2);
+  let h = 0;
+  for (let i = 0; i < hitos; i++) {
+    const z = desde - i * PASO_HITO - 5;
+    for (const s of [-1, 1]) {
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(1);
+      dummy.position.set(X + s * 6.9, 0.52, z);
+      dummy.updateMatrix();
+      mallaHito.setMatrixAt(h, dummy.matrix);
+      dummy.position.y = 0.86;
+      dummy.updateMatrix();
+      mallaBanda.setMatrixAt(h, dummy.matrix);
+      h++;
+    }
+  }
+  mallaHito.count = mallaBanda.count = h;
+  mallaHito.frustumCulled = mallaBanda.frustumCulled = false;
+  grupo.add(mallaHito, mallaBanda);
+
   // Farolas: van a un lado, altas, y pasan muy cerca del objetivo
   const geoFarola = new THREE.CylinderGeometry(0.11, 0.17, 9, 6);
   const geoBrazoF = new THREE.BoxGeometry(0.12, 0.12, 2.2);
   aDesechar.push(geoFarola, geoBrazoF);
-  const farolas = Math.round(cuantos / 6);
+  const farolas = Math.round(cuantos / 4);
   const mallaFarola = new THREE.InstancedMesh(geoFarola, matPoste, farolas);
   const mallaBrazo = new THREE.InstancedMesh(geoBrazoF, matPoste, farolas);
   for (let i = 0; i < farolas; i++) {
     const z = desde - (i / farolas) * largo - 12;
-    dummy.position.set(X + 9.4, 4.5, z);
     dummy.rotation.set(0, 0, 0);
+    dummy.scale.setScalar(1);
+    dummy.position.set(X + 9.4, 4.5, z);
     dummy.updateMatrix();
     mallaFarola.setMatrixAt(i, dummy.matrix);
     dummy.position.set(X + 8.5, 9, z);
@@ -347,13 +463,13 @@ export function crearCarretera({ caps }) {
   // Vegetación de talud: masas simples, nunca protagonistas
   const geoMata = new THREE.SphereGeometry(1.5, 6, 4);
   aDesechar.push(geoMata);
-  const matas = new THREE.InstancedMesh(geoMata, matVerde, cuantos * 2);
-  for (let i = 0; i < cuantos * 2; i++) {
+  const matas = new THREE.InstancedMesh(geoMata, matVerde, cuantos * 3);
+  for (let i = 0; i < cuantos * 3; i++) {
     const z = desde - azar() * largo;
     const s = azar() > 0.5 ? 1 : -1;
-    dummy.position.set(X + s * (11 + azar() * 24), 0.5 + azar() * 0.9, z);
-    dummy.scale.setScalar(0.6 + azar() * 1.5);
     dummy.rotation.set(0, azar() * 3, 0);
+    dummy.position.set(X + s * (11 + azar() * 30), -0.3 + azar() * 0.9, z);
+    dummy.scale.set(0.6 + azar() * 1.6, 0.5 + azar(), 0.6 + azar() * 1.6);
     dummy.updateMatrix();
     matas.setMatrixAt(i, dummy.matrix);
   }
@@ -361,34 +477,40 @@ export function crearCarretera({ caps }) {
   matas.frustumCulled = false;
   grupo.add(matas);
 
-  // Señalización: pórticos y carteles
-  const geoPortico = new THREE.BoxGeometry(0.3, 0.3, 18);
-  const geoPataP = new THREE.BoxGeometry(0.3, 7.2, 0.3);
-  const geoCartel = new THREE.BoxGeometry(0.16, 2.6, 5.4);
-  const matCartel = new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.65 });
+  /* ── Pórticos de señalización ────────────────────────────────────
+     Cuatro, repartidos por la recta. Se pasa POR DEBAJO de todos, y ése es el
+     detalle: la estructura entra por arriba del cuadro, crece, cruza y
+     desaparece en menos de un segundo. Es el mejor marcador de velocidad que
+     hay y no cuesta casi nada. */
+  const geoPortico = new THREE.BoxGeometry(0.34, 0.42, 17.5);
+  const geoPataP = new THREE.BoxGeometry(0.34, 7.2, 0.34);
+  const geoCartel = new THREE.BoxGeometry(0.16, 2.4, 5.2);
+  const matCartel = new THREE.MeshStandardMaterial({ color: 0x15532e, roughness: 0.68 });
   aDesechar.push(geoPortico, geoPataP, geoCartel, matCartel);
-  for (let i = 0; i < 5; i++) {
-    const z = desde - 70 - i * (largo / 5.6);
+  for (let i = 0; i < 4; i++) {
+    const z = desde - 80 - i * (largo / 4.4);
     const p = new THREE.Mesh(geoPortico, matPoste);
-    p.position.set(X, 7.2, z);
+    p.position.set(X, 7.3, z);
     p.castShadow = true;
     grupo.add(p);
     for (const s of [-1, 1]) {
       const pata = new THREE.Mesh(geoPataP, matPoste);
-      pata.position.set(X + s * 8.8, 3.6, z);
+      pata.position.set(X + s * 8.6, 3.65, z);
+      pata.castShadow = true;
       grupo.add(pata);
     }
-    const c = new THREE.Mesh(geoCartel, matCartel);
-    c.position.set(X - 2.2, 5.6, z);
-    c.castShadow = true;
-    grupo.add(c);
+    for (const s of [-1, 1]) {
+      const c = new THREE.Mesh(geoCartel, matCartel);
+      c.position.set(X + s * 2.9, 5.7, z);
+      c.castShadow = true;
+      grupo.add(c);
+    }
   }
 
   /* Un paso superior. Pasar por debajo de una estructura es de las cosas que
      mejor cuentan la velocidad: el cambio de luz es instantáneo. */
   const zPuente = MEDIDAS.carretera.desde - 210;
-  const matHormigon = new THREE.MeshStandardMaterial({ color: 0x8e9196, roughness: 0.9 });
-  aDesechar.push(matHormigon);
+  const matHormigon = hormigon(0x8e9196, 6);
   const geoTablero = new THREE.BoxGeometry(60, 1.6, 11);
   const tablero = new THREE.Mesh(geoTablero, matHormigon);
   tablero.position.set(X, 8.4, zPuente);
@@ -421,15 +543,51 @@ export function crearCentro({ caps }) {
   const aDesechar = [];
   const X = MEDIDAS.gruaX;
   const Z = MEDIDAS.centro;
+  const azar = azarCon(661);
+
+  /* ── POR QUÉ NO SE RECONOCÍA COMO UN ALMACÉN ──────────────────────
+     Era una caja de 160 × 70 × 14 con una franja naranja y nueve rectángulos
+     oscuros. Grande, sí, pero un bloque grande no es un centro logístico: es
+     un bloque grande. Lo que hace reconocible una nave de distribución no es
+     el tamaño, son cinco cosas que se leen antes que la forma:
+
+       · la MARQUESINA sobre los muelles, que proyecta una sombra profunda y
+         horizontal a lo largo de toda la fachada. Es la firma visual del
+         edificio y sin ella no hay muelle de carga que valga;
+       · los TOPES de goma y las placas niveladoras a la altura de la
+         plataforma de un camión —1,25 m—, que es la cota que explica para qué
+         sirve el edificio;
+       · los SEMIRREMOLQUES estacionados en ángulo contra los muelles, que dan
+         la escala y dicen que aquí se trabaja;
+       · el BLOQUE DE OFICINAS en un extremo, más bajo y acristalado, que
+         rompe los 160 metros de chapa;
+       · y la CUBIERTA a dos aguas con sus nervios, porque un techo plano hace
+         que cualquier nave parezca una maqueta.
+     Todo eso está ahora, y el capítulo se re-repartió en `ruta.js` para que el
+     camión se acerque durante el capítulo entero en vez de llegar en el último
+     trece por ciento. */
 
   const mapaNave = texturaNave('#c2c8ce');
-  const matNave = new THREE.MeshStandardMaterial({ map: mapaNave, roughness: 0.74, metalness: 0.22 });
-  const matSuelo = new THREE.MeshStandardMaterial({ color: 0x53575d, roughness: 0.93 });
-  const matOscuro = new THREE.MeshStandardMaterial({ color: 0x242a31, roughness: 0.6, metalness: 0.5 });
-  const matNaranja = new THREE.MeshStandardMaterial({ color: 0xc85a1e, roughness: 0.6, metalness: 0.25 });
-  aDesechar.push(mapaNave, matNave, matSuelo, matOscuro, matNaranja);
+  const matNave = new THREE.MeshStandardMaterial({
+    map: mapaNave, roughness: 0.7, metalness: 0.26,
+    normalMap: aceroPintado('#c2c8ce', { semilla: 44 }).normalMap,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+  });
+  const matSuelo = hormigon(0x5a5e64, 26);
+  const matOscuro = aceroPintado('#242a31', { semilla: 45, rugosidad: 0.6, metal: 0.5 });
+  const matNaranja = aceroPintado('#c85a1e', { semilla: 46, rugosidad: 0.58, metal: 0.25 });
+  const matGomaTope = new THREE.MeshStandardMaterial({ color: 0x17181b, roughness: 0.95 });
+  const matMarca = pintura(0xdfe4e6);
+  aDesechar.push(mapaNave, matNave, matGomaTope);
 
-  const geoExplanada = new THREE.PlaneGeometry(220, 260);
+  const ANCHO = 168;          // fachada de muelles, en X
+  const FONDO = 72;           // profundidad, en Z
+  const ALTO = 13.5;          // al alero
+  const zFachada = Z - 34;    // plano de los muelles
+  const xNave = X - 12;
+
+  /* ── Explanada ─────────────────────────────────────────────────── */
+  const geoExplanada = new THREE.PlaneGeometry(260, 300);
   const explanada = new THREE.Mesh(geoExplanada, matSuelo);
   explanada.rotation.x = -Math.PI / 2;
   explanada.position.set(X, 0.03, Z - 40);
@@ -437,86 +595,277 @@ export function crearCentro({ caps }) {
   grupo.add(explanada);
   aDesechar.push(geoExplanada);
 
-  // La nave: 160 × 70 × 14. Grande de verdad, que es de lo que habla el texto.
-  const geoNave = new THREE.BoxGeometry(160, 14, 70);
+  /* ── Cuerpo de la nave ─────────────────────────────────────────── */
+  const geoNave = new THREE.BoxGeometry(ANCHO, ALTO, FONDO);
   const nave = new THREE.Mesh(geoNave, matNave);
-  nave.position.set(X - 10, 7, Z - 70);
+  nave.position.set(xNave, ALTO / 2, zFachada - FONDO / 2);
   nave.castShadow = true;
   nave.receiveShadow = true;
   grupo.add(nave);
   aDesechar.push(geoNave);
 
-  // Franja de acento y rótulo
-  const geoFranja = new THREE.BoxGeometry(160.4, 1.4, 70.4);
-  const franja = new THREE.Mesh(geoFranja, matNaranja);
-  franja.position.set(X - 10, 12.6, Z - 70);
-  grupo.add(franja);
-  aDesechar.push(geoFranja);
+  /* Cubierta a dos aguas. Un prisma triangular: dos faldones con un cinco por
+     ciento de pendiente y un caballete. Es lo que quita de encima la sensación
+     de maqueta que deja un techo plano. */
+  const cubierta = new THREE.Shape();
+  cubierta.moveTo(-FONDO / 2, 0);
+  cubierta.lineTo(0, 3.2);
+  cubierta.lineTo(FONDO / 2, 0);
+  cubierta.closePath();
+  const geoCubierta = new THREE.ExtrudeGeometry(cubierta, { depth: ANCHO, bevelEnabled: false });
+  geoCubierta.rotateY(Math.PI / 2);
+  geoCubierta.translate(-ANCHO / 2, 0, 0);
+  const tejado = new THREE.Mesh(geoCubierta, matNave);
+  tejado.position.set(xNave, ALTO, zFachada - FONDO / 2);
+  tejado.castShadow = true;
+  grupo.add(tejado);
+  aDesechar.push(geoCubierta);
 
-  /* Muelles de carga con sus puertas seccionales. Se abren cuando llega el
-     camión, que es lo que hace que el edificio parezca vivo. */
+  // Franja de acento bajo el alero, y el rótulo de la marca
+  const geoFranja = new THREE.BoxGeometry(ANCHO + 0.4, 1.5, FONDO + 0.4);
+  const franja = new THREE.Mesh(geoFranja, matNaranja);
+  franja.position.set(xNave, ALTO - 1.1, zFachada - FONDO / 2);
+  grupo.add(franja);
+  const geoRotulo = new THREE.BoxGeometry(34, 2.6, 0.4);
+  const rotulo = new THREE.Mesh(geoRotulo, matMarca);
+  rotulo.position.set(xNave + 46, ALTO - 4.6, zFachada + 0.25);
+  grupo.add(rotulo);
+  aDesechar.push(geoFranja, geoRotulo);
+
+  /* ── Marquesina de muelles ─────────────────────────────────────── */
+  const geoMarquesina = new THREE.BoxGeometry(ANCHO - 34, 0.75, 5.4);
+  const marquesina = new THREE.Mesh(geoMarquesina, matNave);
+  marquesina.position.set(xNave + 12, 6.6, zFachada + 2.5);
+  marquesina.castShadow = true;
+  grupo.add(marquesina);
+  const geoTirante = new THREE.BoxGeometry(0.16, 3.2, 0.16);
+  aDesechar.push(geoMarquesina, geoTirante);
+
+  /* ── Muelles de carga ──────────────────────────────────────────── */
   const puertas = [];
-  const geoHueco = new THREE.BoxGeometry(4.6, 4.8, 0.5);
-  const geoPuerta = new THREE.BoxGeometry(4.4, 4.6, 0.22);
-  const geoTope = new THREE.BoxGeometry(0.5, 0.35, 0.6);
-  aDesechar.push(geoHueco, geoPuerta, geoTope);
-  for (let i = 0; i < 9; i++) {
-    const px = X - 52 + i * 11;
+  const lucesMuelle = [];
+  const geoHueco = new THREE.BoxGeometry(4.8, 5.0, 0.7);
+  const geoPuerta = new THREE.BoxGeometry(4.4, 4.7, 0.2);
+  const geoTope = new THREE.BoxGeometry(0.42, 0.55, 0.32);
+  const geoAnden = new THREE.BoxGeometry(6.2, 1.25, 2.2);
+  const geoNivelador = new THREE.BoxGeometry(2.4, 0.14, 1.9);
+  const geoNumero = new THREE.BoxGeometry(0.9, 0.9, 0.1);
+  const geoFoco = new THREE.BoxGeometry(0.42, 0.3, 0.5);
+  aDesechar.push(geoHueco, geoPuerta, geoTope, geoAnden, geoNivelador, geoNumero, geoFoco);
+
+  const MUELLES = 10;
+  const ASIGNADO = 5;                 // el D-14 del panel de seguimiento
+  for (let i = 0; i < MUELLES; i++) {
+    const px = xNave - 58 + i * 12.6;
+
+    // Andén: la plataforma a la altura de la caja de un camión
+    const anden = new THREE.Mesh(geoAnden, matSuelo);
+    anden.position.set(px, 0.625, zFachada + 1.1);
+    anden.receiveShadow = true;
+    anden.castShadow = true;
+    grupo.add(anden);
+
     const hueco = new THREE.Mesh(geoHueco, matOscuro);
-    hueco.position.set(px, 2.5, Z - 35.2);
+    hueco.position.set(px, 3.7, zFachada - 0.15);
     grupo.add(hueco);
-    const puerta = new THREE.Mesh(geoPuerta, i === 4 ? matNaranja : matNave);
-    puerta.position.set(px, 2.4, Z - 34.9);
+
+    const puerta = new THREE.Mesh(geoPuerta, i === ASIGNADO ? matNaranja : matNave);
+    puerta.position.set(px, 3.6, zFachada + 0.18);
     puerta.castShadow = true;
     grupo.add(puerta);
     puertas.push(puerta);
+
+    // Placa niveladora, abatida sobre el andén
+    const niv = new THREE.Mesh(geoNivelador, matOscuro);
+    niv.position.set(px, 1.3, zFachada + 1.6);
+    grupo.add(niv);
+
+    /* Topes de goma. Son dos piezas de cuarenta centímetros y son el detalle
+       que más dice «aquí atraca un camión»: están exactamente a la altura del
+       faldón trasero de un semirremolque. */
     for (const s of [-1, 1]) {
-      const t = new THREE.Mesh(geoTope, matOscuro);
-      t.position.set(px + s * 2.5, 1.2, Z - 34.6);
+      const t = new THREE.Mesh(geoTope, matGomaTope);
+      t.position.set(px + s * 2.6, 1.05, zFachada + 0.42);
       grupo.add(t);
     }
+
+    // Número de muelle y foco, uno por puerta
+    const num = new THREE.Mesh(geoNumero, i === ASIGNADO ? matMarca : matOscuro);
+    num.position.set(px - 3.2, 5.3, zFachada + 0.22);
+    grupo.add(num);
+
+    const foco = new THREE.Mesh(geoFoco, luminoso(0xffe6b8, 0.6));
+    foco.position.set(px + 3.1, 6.1, zFachada + 0.5);
+    grupo.add(foco);
+    lucesMuelle.push(foco);
+
+    const tir = new THREE.Mesh(geoTirante, matNave);
+    tir.position.set(px + 6.3, 7.9, zFachada + 1.4);
+    tir.rotation.x = 0.5;
+    grupo.add(tir);
   }
 
-  // Vehículos de patio: masas simples que dan actividad sin coste
-  const geoCarretilla = new THREE.BoxGeometry(1.6, 1.8, 2.6);
-  aDesechar.push(geoCarretilla);
-  const carretillas = new THREE.InstancedMesh(geoCarretilla, matNaranja, 7);
+  /* ── Bloque de oficinas ────────────────────────────────────────── */
+  const geoOficina = new THREE.BoxGeometry(30, 8.4, 16);
+  const oficina = new THREE.Mesh(geoOficina, matNave);
+  oficina.position.set(xNave - 86, 4.2, zFachada + 5);
+  oficina.castShadow = true;
+  oficina.receiveShadow = true;
+  grupo.add(oficina);
+  const geoVentanal = new THREE.BoxGeometry(27, 1.9, 0.2);
+  for (let piso = 0; piso < 2; piso++) {
+    const v = new THREE.Mesh(geoVentanal, cristal(0x16232e));
+    v.position.set(xNave - 86, 2.6 + piso * 3.5, zFachada + 13.1);
+    grupo.add(v);
+  }
+  const geoAleroOf = new THREE.BoxGeometry(31, 0.5, 17);
+  const aleroOf = new THREE.Mesh(geoAleroOf, matNaranja);
+  aleroOf.position.set(xNave - 86, 8.6, zFachada + 5);
+  grupo.add(aleroOf);
+  aDesechar.push(geoOficina, geoVentanal, geoAleroOf);
+
+  /* ── Semirremolques estacionados ───────────────────────────────────
+     Cuatro contra los muelles y tres en el patio. Son cajas, y ahí sí está
+     bien que lo sean: nadie las mira. Lo que aportan es la unidad de medida
+     —13,6 metros— repetida por todo el recinto, que es lo que hace legible el
+     tamaño de la nave sin tener que decirlo. */
+  const geoCaja = new THREE.BoxGeometry(13.6, 4.1, 2.55);
+  const geoTren = new THREE.BoxGeometry(2.6, 0.9, 2.3);
+  aDesechar.push(geoCaja, geoTren);
+  const ponRemolque = (x, z, giro, color) => {
+    const r = new THREE.Group();
+    const c = new THREE.Mesh(geoCaja, color);
+    c.position.y = 3.1;
+    c.castShadow = true;
+    r.add(c);
+    const t = new THREE.Mesh(geoTren, matOscuro);
+    t.position.set(-4.6, 0.7, 0);
+    r.add(t);
+    r.position.set(x, 0, z);
+    r.rotation.y = giro;
+    grupo.add(r);
+  };
+  for (let i = 0; i < MUELLES; i++) {
+    if (i === ASIGNADO || i % 3 === 1) continue;
+    const px = xNave - 58 + i * 12.6;
+    ponRemolque(px, zFachada + 9.4, Math.PI / 2, i % 2 ? matNave : matNaranja);
+  }
+  for (let i = 0; i < 4; i++) {
+    ponRemolque(xNave - 40 + i * 17, zFachada + 52, Math.PI / 2 + 0.28, matNave);
+  }
+
+  /* ── Torres de alumbrado del patio ─────────────────────────────── */
+  const geoMastil = new THREE.CylinderGeometry(0.24, 0.42, 22, 8);
+  const geoCabeza = new THREE.BoxGeometry(4.2, 0.5, 1.6);
+  aDesechar.push(geoMastil, geoCabeza);
+  /* Van a los EXTREMOS del patio, no repartidas por él.
+     Estaban cada 44 metros a lo ancho y una de ellas caía justo en el eje por
+     el que la cámara entra en el capítulo de entrega: un mástil de veintidós
+     metros plantado en mitad del cuadro, tapando el plano de pago de todo el
+     recorrido. La prueba de encuadre lo cazó midiendo 0,35 m de holgura. Las
+     torres de un patio de verdad van en el perímetro de todas formas, que es
+     donde no estorban a los camiones —ni, resulta, a la cámara—. */
+  const focosPatio = [];
+  for (let i = 0; i < 4; i++) {
+    const px = xNave + (i < 2 ? -82 - i * 26 : 60 + (i - 2) * 26);
+    const m = new THREE.Mesh(geoMastil, matOscuro);
+    m.position.set(px, 11, zFachada + 30);
+    m.castShadow = true;
+    grupo.add(m);
+    const c = new THREE.Mesh(geoCabeza, luminoso(0xfff0cf, 0.5));
+    c.position.set(px, 22.1, zFachada + 30);
+    grupo.add(c);
+    focosPatio.push(c);
+  }
+
+  /* ── Marcas de patio ───────────────────────────────────────────── */
+  const geoLinea = new THREE.PlaneGeometry(0.2, 17);
+  const lineas = new THREE.InstancedMesh(geoLinea, matMarca, MUELLES + 1);
   const dummy = new THREE.Object3D();
-  const azar = azarCon(661);
+  for (let i = 0; i <= MUELLES; i++) {
+    dummy.position.set(xNave - 64.3 + i * 12.6, 0.05, zFachada + 12);
+    dummy.rotation.set(-Math.PI / 2, 0, 0);
+    dummy.scale.setScalar(1);
+    dummy.updateMatrix();
+    lineas.setMatrixAt(i, dummy.matrix);
+  }
+  lineas.frustumCulled = false;
+  grupo.add(lineas);
+  aDesechar.push(geoLinea);
+
+  /* ── Carretillas ───────────────────────────────────────────────── */
+  const geoCarretilla = new THREE.BoxGeometry(1.35, 2.1, 2.6);
+  aDesechar.push(geoCarretilla);
+  const carretillas = new THREE.InstancedMesh(geoCarretilla, matNaranja, 8);
   const bases = [];
-  for (let i = 0; i < 7; i++) {
-    bases.push({ x: X - 45 + azar() * 80, z: Z - 20 - azar() * 12, fase: azar() * 6.28, radio: 3 + azar() * 7 });
+  for (let i = 0; i < 8; i++) {
+    bases.push({
+      x: xNave - 50 + azar() * 100,
+      z: zFachada + 6 + azar() * 16,
+      fase: azar() * 6.28,
+      radio: 3 + azar() * 8,
+    });
   }
   carretillas.castShadow = true;
   carretillas.frustumCulled = false;
   grupo.add(carretillas);
 
-  // Cámara de lectura de matrícula, en la entrada
-  const geoPortico = new THREE.BoxGeometry(0.4, 0.4, 12);
+  /* ── Control de acceso ─────────────────────────────────────────── */
+  const geoPortico = new THREE.BoxGeometry(0.42, 0.42, 13);
   const portico = new THREE.Mesh(geoPortico, matOscuro);
-  portico.position.set(X, 6.2, Z + 26);
+  portico.position.set(X, 6.3, Z + 46);
   grupo.add(portico);
+  const geoPataP = new THREE.BoxGeometry(0.42, 6.3, 0.42);
   for (const s of [-1, 1]) {
-    const pata = new THREE.Mesh(new THREE.BoxGeometry(0.4, 6.2, 0.4), matOscuro);
-    pata.position.set(X + s * 5.8, 3.1, Z + 26);
+    const pata = new THREE.Mesh(geoPataP, matOscuro);
+    pata.position.set(X + s * 6.3, 3.15, Z + 46);
     grupo.add(pata);
-    aDesechar.push(pata.geometry);
   }
-  aDesechar.push(geoPortico);
+  const geoCaseta = new THREE.BoxGeometry(3.4, 3, 3);
+  const caseta = new THREE.Mesh(geoCaseta, matNave);
+  caseta.position.set(X + 9.5, 1.5, Z + 46);
+  caseta.castShadow = true;
+  grupo.add(caseta);
+  aDesechar.push(geoPortico, geoPataP, geoCaseta);
+
+  /* Valla perimetral: cierra el recinto y, sobre todo, da una línea
+     horizontal que corre al entrar. */
+  const geoValla = new THREE.BoxGeometry(0.1, 2.4, 6);
+  aDesechar.push(geoValla);
+  const valla = new THREE.InstancedMesh(geoValla, matOscuro, 44);
+  let nv = 0;
+  for (const s of [-1, 1]) {
+    for (let i = 0; i < 22; i++) {
+      dummy.position.set(X + s * 96, 1.2, Z + 52 - i * 6);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      valla.setMatrixAt(nv++, dummy.matrix);
+    }
+  }
+  valla.count = nv;
+  valla.frustumCulled = false;
+  grupo.add(valla);
 
   grupo.userData.actualizar = (mundo, reloj) => {
     const c = mundo.centro;
-    // Las puertas suben: la del muelle asignado, antes que las demás
+    /* Las puertas suben, y la del muelle asignado antes que las demás: es lo
+       que dirige la mirada al sitio donde va a pasar algo. */
     puertas.forEach((p, i) => {
-      const propia = i === 4 ? 1 : 0.35;
-      const abre = Math.min(1, c.puertas * propia * (i === 4 ? 1 : 0.7));
-      p.position.y = 2.4 + abre * 4.3;
-      p.visible = abre < 0.99;
+      const propia = i === ASIGNADO ? 1 : 0.42;
+      const abre = Math.min(1, c.puertas * propia);
+      p.position.y = 3.6 + abre * 4.4;
+      p.visible = abre < 0.985;
     });
+    // El alumbrado se enciende con la caída de la luz, no con un interruptor
+    const noche = Math.max(0, 1 - mundo.ambiente.alturaSol * 2.6);
+    for (const f of lucesMuelle) f.material.emissiveIntensity = 0.25 + noche * 1.5;
+    for (const f of focosPatio) f.material.emissiveIntensity = 0.2 + noche * 1.9;
+
     for (let i = 0; i < bases.length; i++) {
       const b = bases[i];
       const a = reloj * 0.28 + b.fase;
-      dummy.position.set(b.x + Math.cos(a) * b.radio, 0.9, b.z + Math.sin(a * 0.8) * b.radio * 0.5);
+      dummy.position.set(b.x + Math.cos(a) * b.radio, 1.05, b.z + Math.sin(a * 0.8) * b.radio * 0.5);
       dummy.rotation.set(0, -a, 0);
       dummy.scale.setScalar(1);
       dummy.updateMatrix();
