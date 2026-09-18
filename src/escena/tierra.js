@@ -91,12 +91,18 @@ export function crearPuerto({ caps }) {
     grupo.add(b);
   }
 
-  // Carriles de las grúas
+  /* Carriles de las grúas.
+     Iban apoyados ENCIMA de la explanada y sobresalían veintiocho centímetros:
+     un bordillo de kilómetro y medio cruzado en el camino por el que sube el
+     camión del muelle a aduanas. Un carril de muelle de verdad va embebido en
+     su bancada de hormigón y asoma un palmo, lo justo para la pestaña de la
+     rueda. Con diez centímetros el camión lo cruza como se cruza en un puerto
+     —notándolo— en lugar de atravesarlo. */
   const geoCarril = new THREE.BoxGeometry(1400, 0.28, 0.9);
   aDesechar.push(geoCarril);
   for (const z of [MEDIDAS.muelle - 4, MEDIDAS.muelle - 4 - MEDIDAS.grua.via]) {
     const c = new THREE.Mesh(geoCarril, matEstructura);
-    c.position.set(0, 0.74, z);
+    c.position.set(0, 0.56, z);
     grupo.add(c);
   }
 
@@ -118,15 +124,33 @@ export function crearPuerto({ caps }) {
   const BLOQUES_FILA = caps.nivel === 'alto' ? 6 : caps.nivel === 'medio' ? 5 : 3;
   const COLS = caps.nivel === 'bajo' || caps.nivel === 'minimo' ? 6 : 8;
 
+  /* LA CALLE DEL CAMIÓN.
+     Los bloques se repartían a lo ancho sin dejar hueco, y el camión va del
+     muelle a aduanas por x = 20: ATRAVESABA la primera fila de bloques. Y con
+     él la cámara, que va detrás: medido, el patio tapaba el 100 % del camión
+     en los capítulos de aduanas y salida.
+
+     Una terminal de verdad tiene su vial interior precisamente para eso. Se
+     deja una calle de 72 metros centrada en la ruta —sitio para el camión y
+     para que la cámara lo siga por detrás— y los bloques se reparten a los dos
+     lados. El ancho no es caprichoso: la cámara llega a 46 m del eje. */
+  const CALLE = 36;                       // media anchura de la calle libre
+  const MEDIO = MEDIDAS.gruaX;            // por donde circula el camión
+  const ANCHO_BLOQUE = (COLS - 1) / 2 * 12.79 + 6.1;
+
   const bloques = [];
   const zonasRTG = [];
   for (let f = 0; f < FILAS_BLOQUE; f++) {
     const z = MEDIDAS.muelle - 82 - f * 42;
+    const izq = Math.ceil(BLOQUES_FILA / 2);
     for (let b = 0; b < BLOQUES_FILA; b++) {
-      const x = (b - (BLOQUES_FILA - 1) / 2) * 148;
+      // Los primeros a la izquierda de la calle, el resto a la derecha
+      const x = b < izq
+        ? MEDIO - CALLE - ANCHO_BLOQUE - (izq - 1 - b) * 148
+        : MEDIO + CALLE + ANCHO_BLOQUE + (b - izq) * 148;
       bloques.push({ x, z, cols: COLS, filas: 6, alto: 4 + ((f + b) % 2), y: 0.6 });
     }
-    zonasRTG.push({ z, ancho: BLOQUES_FILA * 148 });
+    zonasRTG.push({ z, ancho: BLOQUES_FILA * 148, medio: MEDIO, calle: CALLE + ANCHO_BLOQUE });
   }
   const pilas = crearPilas({ bloques, semilla: 5 });
   grupo.add(pilas);
@@ -142,7 +166,7 @@ export function crearPuerto({ caps }) {
   let nr = 0;
   for (const zona of zonasRTG) {
     for (const s2 of [-1, 1]) {
-      dummy.position.set(0, 0.63, zona.z + s2 * 12.5);
+      dummy.position.set(MEDIO, 0.63, zona.z + s2 * 12.5);
       dummy.rotation.set(-Math.PI / 2, 0, 0);
       dummy.scale.setScalar(1);
       dummy.updateMatrix();
@@ -178,7 +202,9 @@ export function crearPuerto({ caps }) {
     // Una o dos por fila de bloques, nunca en el mismo sitio
     const cuantas = caps.nivel === 'alto' ? 2 : 1;
     for (let k = 0; k < cuantas; k++) {
-      const x = (rtgAzar() - 0.5) * zona.ancho * 0.7;
+      // Tampoco las grúas de patio se plantan en el vial
+      const lado = k % 2 ? 1 : -1;
+      const x = zona.medio + lado * (zona.calle + rtgAzar() * zona.ancho * 0.22);
       const rtg = new THREE.Group();
       rtg.position.set(x, 0.6, zona.z);
       for (const sz of [-1, 1]) {
@@ -370,6 +396,7 @@ export function crearAduanas() {
   const barrido = new THREE.Mesh(geoBarrido, matBarrido);
   barrido.rotation.y = Math.PI / 2;
   barrido.renderOrder = 7;
+  barrido.userData.efecto = true;          // luz, no acero: nada choca con ella
   grupo.add(barrido);
   aDesechar.push(mancha, matBarrido, geoBarrido);
 

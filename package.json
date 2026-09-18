@@ -12,9 +12,12 @@
     "encuadre": "node pruebas-encuadre.mjs",
     "texto": "node texto.mjs",
     "pruebas": "node pruebas.mjs",
-    "verificar": "npm run build && npm run guion && npm run texto && npm run responsive && npm run limpieza && npm run encuadre",
+    "verificar": "npm run build && npm run guion && npm run sincronia && npm run texto && npm run responsive && npm run limpieza && npm run colision && npm run oclusion && npm run encuadre",
     "responsive": "node responsive.mjs",
-    "limpieza": "node limpieza.mjs"
+    "limpieza": "node limpieza.mjs",
+    "sincronia": "node sincronia.mjs",
+    "oclusion": "node oclusion.mjs",
+    "colision": "node colision.mjs"
   },
   "dependencies": {
     "gsap": "3.12.5",

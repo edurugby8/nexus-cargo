@@ -200,8 +200,26 @@ export function gruaEn(p, ajustes = { velocidadGrua: 1, oscilacion: 1 }) {
   const zBuque = MEDIDAS.amarre.z;
   const zCamion = MEDIDAS.camionEspera.z;
   const yCubierta = 32.5;        // parte alta de la pila donde viaja el nuestro
-  const yCamion = MEDIDAS.camion.plataforma + MEDIDAS.contenedor.alto / 2;
-  const yCrucero = 58;           // altura de paso por encima del buque
+  // La plataforma del remolque se mide desde el firme, no desde la cota cero
+  const yCamion = sueloEn(MEDIDAS.camionEspera.z)
+    + MEDIDAS.camion.plataforma + MEDIDAS.contenedor.alto / 2;
+  /* Altura de paso. Era 58 y la viga del pórtico está a 61: tres metros de
+     hueco. Consecuencia geométrica ineludible: con la carga a 58 y la viga a
+     61, CUALQUIER cámara por encima del contenedor tenía la viga en medio.
+     Medido, tapaba el 78 % del contenedor en escritorio y el 89 % en móvil.
+     No era un plano mal elegido, era imposible de elegir bien.
+
+     Una grúa sube lo JUSTO para salvar la pila del buque, que remata a 32,5.
+     Con 38, el fondo del contenedor pasa dos metros y medio por encima de la
+     pila —que es lo que hace una grúa de verdad— y quedan veintitrés metros
+     libres por debajo de la viga. Ahí sí cabe una cámara mirando la carga
+     desde arriba sin tener la viga en medio: a 48 m de distancia y 22° de
+     elevación, la cámara queda a 57, cuatro metros por debajo de la viga.
+
+     Es geometría, no gusto: la altura de paso y el ángulo de cámara están
+     atados, y elegir uno sin el otro es lo que hacía imposible encuadrar este
+     capítulo. */
+  const yCrucero = 38;           // altura de paso por encima del buque
   const zEspera = zBuque + 26;   // de dónde sale el carro al empezar
 
   if (antes) {
@@ -362,6 +380,41 @@ function carroDe(t) {
 /* ── El camión ────────────────────────────────────────────────────── */
 
 /**
+ * ALTURA DEL FIRME BAJO EL CAMIÓN.
+ *
+ * El camión rodaba a cota cero de punta a punta del viaje, y el mundo no está
+ * a cota cero: el muelle es una plataforma de hormigón a 60 cm sobre el nivel
+ * del mar, la carretera es asfalto a ras de terreno y las explanadas del
+ * centro y del destino están casi un palmo por debajo de la carretera.
+ *
+ * Resultado: dentro del puerto el camión llevaba las ruedas MEDIO METRO
+ * metidas en el hormigón —medio neumático enterrado, y es lo que le hacía
+ * atravesar los carriles de las grúas de muelle, que van apoyados sobre esa
+ * misma explanada— y en el centro logístico flotaba sesenta y siete
+ * centímetros por encima del pavimento.
+ *
+ * Aquí se devuelve la cota del pavimento en cada punto del recorrido, con una
+ * rampa de treinta metros en cada cambio: es lo que hay de verdad entre la
+ * plataforma del muelle y la carretera, y treinta metros a la velocidad a la
+ * que va el camión son un segundo largo, así que se lee como un desnivel y no
+ * como un escalón. Lo usan el camión, la carga que lleva encima y el ancla de
+ * cámara que lo sigue, de manera que los tres no pueden separarse.
+ */
+export function sueloEn(z) {
+  const MUELLE = 0.6;        // la explanada de hormigón del puerto
+  const ASFALTO = 0.02;      // la calzada
+  const RECINTO = -0.67;     // las explanadas del centro y del destino
+  const RAMPA = 30;
+  const finPuerto = MEDIDAS.carretera.desde + 20;      // −120: pasada la barrera
+  const bocaRecinto = MEDIDAS.centro + 76;             // antes de la entrada
+  if (z > finPuerto) return MUELLE;
+  if (z > finPuerto - RAMPA) return lerp(MUELLE, ASFALTO, (finPuerto - z) / RAMPA);
+  if (z > bocaRecinto) return ASFALTO;
+  if (z > bocaRecinto - RAMPA) return lerp(ASFALTO, RECINTO, (bocaRecinto - z) / RAMPA);
+  return RECINTO;
+}
+
+/**
  * Posición del camión a lo largo de todo el recorrido. Devuelve también la
  * VELOCIDAD, que es lo que alimenta el giro de las ruedas, el cabeceo de la
  * suspensión y la inclinación al acelerar y frenar. Se saca por diferencias
@@ -423,6 +476,7 @@ export function camionEn(p, ajustes = { velocidadCamion: 1, suspension: 1 }) {
   const marcha = clamp(Math.abs(velocidad) / 2600);
   return {
     z,
+    y: sueloEn(z),                             // la cota del firme que pisa
     velocidad,
     marcha,                                    // 0 parado · 1 a su ritmo
     // Giro de rueda: es la DISTANCIA recorrida entre el radio, no un contador
@@ -646,7 +700,7 @@ const PLANOS = {
   puerto: [
     { t: 0.00, ancla: 'barco', dist: 395, elev: 42, azim: 34, miraY: 12, miraZ: -18, fov: 38 },
     { t: 0.55, ancla: 'barco', dist: 330, elev: 46, azim: 32, miraY: 10, miraZ: -14, fov: 40 },
-    { t: 1.00, ancla: 'barco', dist: 214, elev: 48, azim: 30, miraY: 8, miraZ: -10, fov: 42 },
+    { t: 1.00, ancla: 'barco', dist: 192, elev: 48, azim: 30, miraY: 8, miraZ: -10, fov: 42 },
   ],
 
   /* CAPÍTULO 3 · DESCARGA  ─────────────────────────────────── ★2 enganche
@@ -667,18 +721,18 @@ const PLANOS = {
        barrido —medido: la cámara recorría 480 m mientras el buque ya estaba
        atracado y quieto—. Ahora el cierre se reparte desde alta mar hasta el
        enganche, y en ningún punto la cámara le gana al sujeto. */
-    { t: 0.00, ancla: 'contenedor', dist: 198, elev: 46, azim: 30, miraY: 4, miraZ: -10, fov: 42 },
-    { t: 0.28, ancla: 'contenedor', dist: 146, elev: 45, azim: 30, miraY: 2, miraZ: -8, fov: 42 },
-    { t: 0.44, ancla: 'contenedor', dist: 86, elev: 36, azim: 29, miraY: 1, miraZ: -5, fov: 43 },
+    { t: 0.00, ancla: 'contenedor', dist: 176, elev: 46, azim: 30, miraY: 4, miraZ: -10, fov: 42 },
+    { t: 0.28, ancla: 'contenedor', dist: 124, elev: 43, azim: 30, miraY: 2, miraZ: -8, fov: 42 },
+    { t: 0.44, ancla: 'contenedor', dist: 82, elev: 32, azim: 29, miraY: 1, miraZ: -5, fov: 43 },
     /* ★2 · el acercamiento del enganche, TERMINADO antes de que el carro
        arranque. Si la cámara sigue cerrándose mientras la carga cruza hacia
        tierra, se suman las dos velocidades y la cámara adelanta al contenedor
        —1,50× medido—, que es justo lo que el encargo prohíbe. A partir de
        aquí la distancia se queda quieta y la cámara se limita a acompañar. */
-    { t: 0.56, ancla: 'contenedor', dist: 58, elev: 26, azim: 28, miraY: 0, miraZ: -3, fov: 44 },
-    { t: 0.72, ancla: 'contenedor', dist: 56, elev: 25, azim: 28, miraY: 0, miraZ: -2, fov: 44 },
-    { t: 0.84, ancla: 'contenedor', dist: 54, elev: 27, azim: 28, miraY: 0, miraZ: -3, fov: 44 },
-    { t: 0.93, ancla: 'contenedor', dist: 54, elev: 38, azim: 29, miraY: -1, miraZ: -4, fov: 44 },
+    { t: 0.56, ancla: 'contenedor', dist: 52, elev: 22, azim: 28, miraY: 0, miraZ: -3, fov: 44 },
+    { t: 0.72, ancla: 'contenedor', dist: 48, elev: 21, azim: 28, miraY: 0, miraZ: -2, fov: 44 },
+    { t: 0.84, ancla: 'contenedor', dist: 48, elev: 23, azim: 28, miraY: 0, miraZ: -3, fov: 44 },
+    { t: 0.93, ancla: 'contenedor', dist: 48, elev: 32, azim: 29, miraY: -1, miraZ: -4, fov: 44 },
     { t: 1.00, ancla: 'camion', dist: 58, elev: 48, azim: 30, miraY: 3, miraZ: -8, fov: 44 },
   ],
 
@@ -744,7 +798,8 @@ function anclajeEn(nombre, p) {
     return [c.x, c.y, c.z];
   }
   if (nombre === 'camion') {
-    return [MEDIDAS.gruaX, 0, camionZ(p, { velocidadCamion: 1 })];
+    const z = camionZ(p, { velocidadCamion: 1 });
+    return [MEDIDAS.gruaX, sueloEn(z), z];
   }
   return [0, 0, 0];
 }

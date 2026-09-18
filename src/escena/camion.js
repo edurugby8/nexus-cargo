@@ -282,8 +282,10 @@ export function crearCamion({ caps }) {
 
   grupo.userData.actualizar = (mundo, reloj, ajustes, dt) => {
     const c = mundo.camion;
-    // El camión avanza hacia −Z, así que mira en esa dirección
-    grupo.position.set(MEDIDAS.gruaX, 0, c.z);
+    // El camión avanza hacia −Z, así que mira en esa dirección. La cota sale
+    // del guion: el muelle está 60 cm por encima de la carretera y las ruedas
+    // tienen que apoyarse en el firme de cada sitio, no en un cero abstracto.
+    grupo.position.set(MEDIDAS.gruaX, c.y, c.z);
     grupo.rotation.y = Math.PI / 2;
 
     const giro = c.giroRueda;

@@ -17,6 +17,8 @@ import { clamp, lerp } from '../lib/util.js';
 import { texturaChapa } from './texturas.js';
 
 const G = MEDIDAS.grua;
+/** Cota de la cabeza del carril: es donde apoya la grúa. */
+const APOYO = 0.7;
 
 /**
  * Celosía: dos cordones y sus diagonales. Barata y se lee a un kilómetro.
@@ -60,7 +62,13 @@ function celosia(largo, canto, tramos, material, eje = 'x') {
  */
 export function crearGrua({ x, activa = false, caps }) {
   const grupo = new THREE.Group();
-  grupo.position.x = x;
+  /* LA GRÚA SE APOYA EN EL CARRIL, no en la cota cero.
+     Estaba plantada en y = 0 mientras la explanada del muelle es una
+     plataforma de hormigón a 60 cm y el carril que la sostiene remata a 70:
+     las cuatro patas y los ocho bogies de ocho mil toneladas de grúa estaban
+     enterrados setenta centímetros en el pavimento. No se ve desde lejos y
+     salta a la vista en cuanto la cámara baja al muelle. */
+  grupo.position.set(x, APOYO, 0);
   const aDesechar = [];
 
   const mapa = texturaChapa('#7d8792', 11, 0.6);
@@ -88,12 +96,24 @@ export function crearGrua({ x, activa = false, caps }) {
       pata.castShadow = true;
       grupo.add(pata);
     }
-    // Carro de traslación y ruedas sobre el carril
-    const geoBogie = new THREE.BoxGeometry(18, 1.8, 2.6);
-    const bogie = new THREE.Mesh(geoBogie, matOscuro);
-    bogie.position.set(0, 0.9, z);
-    bogie.castShadow = true;
-    grupo.add(bogie);
+    /* Carros de traslación: UNO POR PATA, no uno de lado a lado.
+       Era una caja de dieciocho metros tendida de carril a carril, y por el
+       centro de esa caja —por el eje de la grúa, x = 20— es justo por donde
+       sube el camión del muelle a aduanas. El camión la atravesaba de parte a
+       parte, medio metro y medio de acero macizo, en los dos carriles.
+
+       Y no era sólo una colisión: una grúa de muelle de verdad NO tiene nada
+       tendido entre carriles a ras de suelo, porque por debajo del pórtico
+       circulan precisamente los camiones. Lo que lleva es un tren de bogies
+       bajo cada pata. Así que la pieza correcta y la pieza que no estorba son
+       la misma, que es como suelen acabar estas cosas. */
+    const geoBogie = new THREE.BoxGeometry(5.4, 1.8, 2.6);
+    for (const dx of [-7, 7]) {
+      const bogie = new THREE.Mesh(geoBogie, matOscuro);
+      bogie.position.set(dx, 0.9, z);
+      bogie.castShadow = true;
+      grupo.add(bogie);
+    }
     aDesechar.push(geoBogie);
   }
 
@@ -192,6 +212,13 @@ export function crearGrua({ x, activa = false, caps }) {
         spreader.userData.locks.push(l);
       }
     }
+    /* El aparejo —spreader, twistlocks y cables— va marcado porque no es un
+       ESTORBO aunque geométricamente lo parezca: es lo que sujeta la carga y
+       viaja con ella. La cámara y las pruebas de oclusión lo tratan como parte
+       del sujeto, igual que el contenedor protagonista es parte del camión que
+       lo lleva. Sin esta marca, la cámara se apartaba de su propio contenedor
+       durante todo el capítulo de la descarga. */
+    spreader.traverse((o) => { o.userData.aparejo = true; });
     grupo.add(spreader);
 
     /* Los cables.
@@ -206,6 +233,7 @@ export function crearGrua({ x, activa = false, caps }) {
     for (let i = 0; i < 4; i++) {
       const c = new THREE.Mesh(geoCable, matCable);
       c.castShadow = true;
+      c.userData.aparejo = true;
       cables.push(c);
       grupo.add(c);
     }
@@ -231,7 +259,9 @@ export function crearGrua({ x, activa = false, caps }) {
     const yTapa = MEDIDAS.contenedor.alto / 2;
     spreader.position.set(
       MEDIDAS.gruaX + (g.desvio || 0) - grupo.position.x,
-      g.spreaderY + yTapa + 0.46,
+      // `spreaderY` viene del guion en cota del mundo; aquí se pinta en
+      // coordenadas de la grúa, que ahora está subida a la cabeza del carril
+      g.spreaderY + yTapa + 0.46 - APOYO,
       g.contenedor ? g.contenedor.z : g.carroZ,
     );
     // El spreader se ladea con la carga: cuelga, no está atornillado

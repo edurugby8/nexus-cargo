@@ -10,7 +10,7 @@
  *
  *   node pruebas-guion.mjs
  */
-import { poseEn, mundoEn, TRAMOS, NUM_PLANOS, ALTURAS, capituloEn, PASOS_GRUA } from './src/escena/ruta.js';
+import { poseEn, mundoEn, TRAMOS, NUM_PLANOS, ALTURAS, capituloEn, PASOS_GRUA, MEDIDAS, sueloEn } from './src/escena/ruta.js';
 
 let fallos = 0;
 const mal = (m) => { console.log('  ✗', m); fallos++; };
@@ -143,7 +143,8 @@ const razonZ = fino.dz / Math.max(1e-9, grueso.dz);
 
 // 7 · El contenedor acaba sobre el remolque, a la altura correcta
 const tras = mundoEn(TRAMOS[3].desde + 0.005).grua;
-const yEsperada = 1.25 + 2.90 / 2;
+// La altura del remolque se mide desde el FIRME del muelle, no desde cero
+const yEsperada = sueloEn(MEDIDAS.camionEspera.z) + 1.25 + 2.90 / 2;
 ok(`tras la descarga la grúa queda libre (fase «${tras.fase}»)`);
 const durante = mundoEn(TRAMOS[2].desde + (TRAMOS[2].hasta-TRAMOS[2].desde)*0.95).grua.contenedor;
 Math.abs(durante.y - yEsperada) < 0.05

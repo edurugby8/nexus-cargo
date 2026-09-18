@@ -161,6 +161,42 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
     regiones.push({ obj: g, desde: -1, hasta: inicioDe('salida') + 0.04 });
   }
 
+  /* ── ESTORBOS PARA LA CÁMARA ──────────────────────────────────────
+     Elegir bien los planos no basta, y el capítulo de la descarga lo demuestra
+     mejor que ninguno: la carga cuelga DEBAJO de la viga del pórtico, así que
+     mirarla desde arriba obliga a atravesar la viga. No es un plano mal
+     elegido; es que desde ese ángulo no existe un plano bueno.
+
+     Así que la cámara esquiva. Se registra una lista CORTA de los estorbos que
+     de verdad tapan —las cinco grúas, el edificio de terminal, la nave del
+     centro y la del destino— y cada pocos fotogramas se tira un rayo de la
+     cámara al sujeto. Si choca, la cámara SUBE por encima del estorbo,
+     suavemente, y vuelve a bajar cuando el camino queda libre.
+
+     Corta a propósito: un rayo contra cincuenta mallas cuesta nada; contra las
+     tres mil del patio, costaría el fotograma. Y son las grandes las que tapan;
+     un bolardo no tapa un camión. */
+  const obstaculos = [];
+  const registrarEstorbo = (raiz) => {
+    raiz?.traverse((o) => {
+      if (!o.isMesh || o.userData.envolvente) return;
+      /* El APAREJO no es un estorbo: es lo que sujeta la carga. El spreader va
+         cuarenta y seis centímetros por encima de la tapa del contenedor y los
+         cables salen de sus esquinas, así que cualquier rayo hacia la carga
+         roza el aparejo por definición. Contarlo hacía que la cámara se
+         apartase de su propio sujeto durante todo el capítulo de la descarga. */
+      if (o.userData.aparejo) return;
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      // Sólo lo grande: por debajo de tres metros de radio no tapa nada
+      if (o.geometry.boundingSphere.radius < 3) return;
+      obstaculos.push(o);
+    });
+  };
+  for (const g of gruas) registrarEstorbo(g);
+  registrarEstorbo(aduanas);
+  registrarEstorbo(centro);
+  registrarEstorbo(destino);
+
   /* ── Estado del bucle ─────────────────────────────────────────── */
   const st = {
     progreso: 0, objetivo: 0,
@@ -175,6 +211,15 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   const dirSol = new THREE.Vector3();
   const puntoLocal = new THREE.Vector3();
   const giroRemolque = new THREE.Quaternion();
+  const rayoCamara = new THREE.Raycaster();
+  const dirRayo = new THREE.Vector3();
+  const desvio = new THREE.Vector3();
+  const tiro = new THREE.Vector3();
+  const tanteo = new THREE.Vector3();
+  /** Grados que la cámara ha tenido que desviarse para librar un estorbo. */
+  let desvioEstorbo = 0;
+  let desvioObjetivo = 0;
+  let contadorRayo = 0;
 
   let reloj = 0;
   let movimiento = reducido ? 0 : 1;
@@ -227,19 +272,45 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   let mapa = [];
 
   function medirTramos() {
-    const nuevo = [];
+    const vh = window.innerHeight;
+    const secciones = [];
     for (const t of TRAMOS) {
       const el = document.getElementById(t.id);
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      nuevo.push({
-        top: r.top + window.scrollY,
-        alto: Math.max(1, r.height),
-        desde: t.desde,
-        hasta: t.hasta,
-      });
+      secciones.push({ top: r.top + window.scrollY, alto: Math.max(1, r.height), t });
     }
-    if (nuevo.length) mapa = nuevo;
+    if (!secciones.length) return;
+
+    /* EL RELEVO, que es donde estaba el desfase.
+       ─────────────────────────────────────────────────────────────
+       La caja de texto de un capítulo está PEGADA mientras el scroll recorre
+       su sección menos una altura de ventana. En esa última altura la caja se
+       va hacia arriba y la del capítulo siguiente entra por abajo, y a mitad
+       de camino la que ocupa la pantalla ya es la SIGUIENTE.
+
+       El reparto anterior daba a cada capítulo su sección entera, así que
+       durante esa última altura el rótulo, el panel y la escena seguían en el
+       capítulo anterior mientras el visitante leía ya el siguiente. Medido: a
+       3600 px la caja de «Descarga» ocupaba el 80 % de la pantalla y el menú
+       marcaba «Llegada a puerto». Es exactamente el desfase de una escena que
+       se reportó, y mi prueba anterior no lo veía porque muestreaba el centro
+       de cada tramo —bien dentro de la zona pegada, donde todo coincide—.
+
+       Ahora cada capítulo empieza MEDIA VENTANA ANTES del comienzo de su
+       sección, que es el punto en el que su caja pasa a dominar la pantalla.
+       El primero es la excepción y arranca en cero: si no, la portada
+       empezaría con el recorrido ya avanzado un 23 %. */
+    const mitad = vh / 2;
+    const nuevo = [];
+    for (let i = 0; i < secciones.length; i++) {
+      const s = secciones[i];
+      const sig = secciones[i + 1];
+      const inicio = i === 0 ? 0 : s.top - mitad;
+      const fin = sig ? sig.top - mitad : s.top + s.alto - mitad;
+      nuevo.push({ inicio, largo: Math.max(1, fin - inicio), desde: s.t.desde, hasta: s.t.hasta });
+    }
+    mapa = nuevo;
   }
 
   function progresoDeScroll() {
@@ -248,13 +319,12 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
       return clamp(window.scrollY / max);
     }
     const y = window.scrollY;
-    if (y <= mapa[0].top) return 0;
+    if (y <= mapa[0].inicio) return 0;
     for (const t of mapa) {
-      if (y < t.top + t.alto) return lerp(t.desde, t.hasta, clamp((y - t.top) / t.alto));
+      if (y < t.inicio + t.largo) return lerp(t.desde, t.hasta, clamp((y - t.inicio) / t.largo));
     }
     /* Pasado el último capítulo el viaje está hecho: la escena se queda en su
-       plano final mientras se leen los servicios y el formulario. Quedarse es
-       lo correcto; seguir moviéndose sería inventar un noveno capítulo. */
+       plano final mientras se leen los servicios y el formulario. */
     return 1;
   }
 
@@ -276,6 +346,82 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   const ASPECTO_REF = 1.6;
   /** Por debajo de esto la cámara estaría dentro del firme. */
   const ALTURA_MINIMA = 0.9;
+
+  /* ── Geometría del esquive ────────────────────────────────────────
+     Dos piezas sueltas porque se usan dos veces: una para TANTEAR ángulos y
+     otra para aplicar el que se haya elegido. */
+
+  /**
+   * Sitúa `tanteo` en la cámara girada `grados` de elevación alrededor del
+   * punto de mira. Girar alrededor de la mira conserva el encuadre: el sujeto
+   * no se mueve del cuadro, sólo cambia desde dónde se le ve. Devuelve `false`
+   * si el giro metería la cámara bajo tierra, que no es una opción.
+   */
+  const girarElevacion = (grados) => {
+    desvio.subVectors(objetivoPos, objetivoMira);
+    const largo = desvio.length();
+    const horiz = Math.hypot(desvio.x, desvio.z);
+    if (horiz < 1e-4 || largo < 1e-4) return false;
+    const elev = clamp(Math.atan2(desvio.y, horiz) + grados * GRADO, -1.3, 1.3);
+    const nuevoHoriz = Math.cos(elev) * largo;
+    tanteo.set(
+      objetivoMira.x + (desvio.x / horiz) * nuevoHoriz,
+      objetivoMira.y + Math.sin(elev) * largo,
+      objetivoMira.z + (desvio.z / horiz) * nuevoHoriz,
+    );
+    return tanteo.y >= ALTURA_MINIMA;
+  };
+
+  /**
+   * Cuántos de tres rayos hacia el sujeto chocan con un estorbo.
+   *
+   * TRES, no uno. Con un solo rayo al centro, media grúa delante pasaba
+   * desapercibida si justo dejaba pasar ese rayo. Los otros dos van abiertos a
+   * los costados, a la anchura de un contenedor, así que basta con que asome
+   * un montante para que la cámara reaccione.
+   */
+  const rayosBloqueados = (desde) => {
+    tiro.subVectors(objetivoMira, desde);
+    const hasta = tiro.length();
+    const h = Math.hypot(tiro.x, tiro.z) || 1;
+    // Marco horizontal alrededor de la mirada: hacia dónde y hacia los lados
+    const fx = tiro.x / h; const fz = tiro.z / h;
+    let n = 0;
+    for (const [lado, frente, baja] of HUELLA) {
+      dirRayo.copy(tiro);
+      dirRayo.x += -fz * lado + fx * frente;
+      dirRayo.z += fx * lado + fz * frente;
+      dirRayo.y -= baja;
+      dirRayo.divideScalar(Math.max(1e-6, dirRayo.length()));
+      rayoCamara.set(desde, dirRayo);
+      rayoCamara.far = Math.max(1, hasta - 3);
+      if (rayoCamara.intersectObjects(obstaculos, false).length) n++;
+    }
+    return n;
+  };
+
+  /* Los ángulos que se tantean, ordenados por lo poco que mueven la cámara: el
+     primero que despeja, gana. Bajar va antes que subir a igualdad de grados
+     porque el estorbo típico de esta historia —la viga del pórtico, el arco
+     del escáner— está ARRIBA.
+
+     Y el tope es TRECE GRADOS, no veintiocho. Con veintiocho disponibles, a la
+     salida de aduanas el esquive encontraba que subiendo del todo se veía por
+     encima del arco, y se iba a ciento sesenta y un metros de altura: el rayo
+     quedaba limpio y el plano, destrozado. Un esquive es un ajuste, no un
+     cambio de plano; si hacen falta más de trece grados, el problema es el
+     guion y se arregla escribiendo el plano, no empujando la cámara. */
+  const DESVIOS = [0, -6, 7, -13, 14];
+
+  /* A dónde se tira cada rayo, alrededor del punto de mira: [lado, frente,
+     baja] en metros. No basta con apuntar al centro del sujeto —un camión mide
+     dieciséis metros y medio y lo que se le tapa es la COLA, no el centro—, así
+     que se cubre su huella: los costados, el morro, la cola y por debajo. Ésa
+     es la diferencia entre «el punto de mira está despejado» y «se ve el
+     camión». */
+  const HUELLA = [
+    [0, 0, 0], [-7, 0, 0], [7, 0, 0], [0, 8, 1.2], [0, -8, 1.2],
+  ];
 
   function encuadre(fovBase, aspecto) {
     const horizontalRef = 2 * Math.atan(Math.tan((fovBase * GRADO) / 2) * ASPECTO_REF);
@@ -379,6 +525,47 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
        donde hay suelo: en alta mar y en el traslado de la grúa la cámara va a
        decenas de metros de altura y esto no la toca nunca. */
     if (objetivoPos.y < ALTURA_MINIMA) objetivoPos.y = ALTURA_MINIMA;
+
+    /* ── Esquivar estorbos ──────────────────────────────────────────
+       El tanteo se hace cada cuatro fotogramas, no cada uno: los estorbos son
+       estructuras fijas y la cámara se mueve despacio, así que mirar a 15 Hz
+       da el mismo resultado por la cuarta parte del coste.
+
+       Y se esquiva EN LOS DOS SENTIDOS. La primera versión sólo subía, y eso
+       acierta exactamente la mitad de las veces: cuando el estorbo está por
+       ENCIMA de la línea de mira —la viga del pórtico, el arco del escáner por
+       el que el camión pasa— subir mete la cámara más detrás del estorbo, no
+       menos, y el sistema se realimenta solo hasta un picado imposible. A la
+       salida de aduanas la cámara acababa a noventa y cinco metros y a 57° de
+       picado porque ella misma se había empujado hasta ahí, y desde ahí el
+       arco le tapaba la cola del camión, que era justo lo que huía de tapar.
+
+       Ahora se tantean seis ángulos, tres hacia abajo y tres hacia arriba, y
+       gana el que despeja moviendo menos. Si ninguno despeja del todo, el que
+       menos rayos deje bloqueados; y si todos empatan, ninguno: apartarse sin
+       ganar nada sólo estropea el plano que pide el guion. */
+    if (obstaculos.length && (forzado !== null || (contadorRayo++ & 3) === 0)) {
+      let mejor = 0;
+      let mejorBloqueo = 99;
+      for (const grados of DESVIOS) {
+        if (!girarElevacion(grados)) continue;
+        const b = rayosBloqueados(tanteo);
+        if (b < mejorBloqueo) { mejorBloqueo = b; mejor = grados; }
+        if (b === 0) break;
+      }
+      desvioObjetivo = mejor;
+    }
+    /* Con el progreso impuesto desde fuera —las pruebas— el esquive se aplica
+       ENTERO y de golpe. Amortiguarlo ahí mediría a dónde ha llegado la
+       cámara en dieciséis milisegundos, que es prácticamente donde estaba, y
+       la prueba acabaría midiendo la inercia en vez del resultado. */
+    desvioEstorbo = forzado !== null
+      ? desvioObjetivo
+      : damp(desvioEstorbo, desvioObjetivo, 2.2, dt);
+
+    if (Math.abs(desvioEstorbo) > 0.2 && girarElevacion(desvioEstorbo)) {
+      objetivoPos.copy(tanteo);
+    }
 
     /* ENCUADRE EN VERTICAL.
        Ensanchar el ángulo para recuperar lo que una pantalla alta recorta por
@@ -570,6 +757,15 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
          mismo que lo que el guion pide. */
       irA(p) {
         forzado = clamp(p);
+        /* Y la ENTRADA se da por terminada. La cámara llega al principio desde
+           260 m más arriba y 180 m más atrás, y esa entrada sólo arranca
+           cuando el visitante pasa de la portada. En el banco de pruebas nadie
+           pasa de la portada, así que `entrada` se quedaba en cero y TODAS las
+           medidas —encuadre y oclusión— se tomaban con la cámara a
+           doscientos sesenta metros de donde de verdad está. Medía otra
+           película. */
+        st.entrada = 1;
+        inicioEntrada = 0;
         anterior = performance.now() - 16;
         pintar();
         forzado = null;
