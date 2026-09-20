@@ -313,7 +313,17 @@ export function crearCamion({ caps }) {
 
   grupo.userData.remolque = remolque;
   // Dónde se apoya el contenedor sobre el chasis, en coordenadas del camión
-  grupo.userData.apoyo = new THREE.Vector3(-6.4, MEDIDAS.camion.plataforma, 0);
+/* Dónde va el CENTRO del contenedor sobre este camión, en coordenadas del
+   camión. Las dos cifras vienen del guion y no de aquí, porque la grúa tiene
+   que dejar la carga exactamente en este punto: si las dos no salen del mismo
+   sitio, se separan, y eso es justo lo que pasaba —el contenedor caía sobre la
+   cabina y al soltarlo saltaba a la plataforma hundido metro y medio, porque
+   esto era la altura de la PLATAFORMA y se usaba como centro de la caja. */
+  grupo.userData.apoyo = new THREE.Vector3(
+    -MEDIDAS.camion.apoyo,
+    MEDIDAS.camion.plataforma + MEDIDAS.contenedor.alto / 2,
+    0,
+  );
   grupo.userData.liberar = () => aDesechar.forEach((o) => o.dispose?.());
   return grupo;
 }

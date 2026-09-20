@@ -262,13 +262,33 @@ export function crearPuerto({ caps }) {
   const geoPlataforma = new THREE.BoxGeometry(12.4, 1.1, 2.5);
   aDesechar.push(geoTractora, geoPlataforma);
 
+  /* Y NO EN EL VIAL.
+     Se repartían por `x = -560 + azar * 1120`, o sea por cualquier punto de la
+     franja, incluido el carril por el que sube el camión: la mitad llevan un
+     contenedor de cuarenta pies encima, así que el camión los atravesaba a
+     ellos y a su carga. Con el detalle de que en nivel bajo sólo hay nueve y
+     con esa semilla ninguno caía en medio, así que el banco de pruebas —que
+     mide en bajo— lo daba por bueno mientras cualquiera con un portátil
+     normal, que ve veintiséis, lo tenía delante.
+
+     El tren de tractora y plataforma ocupa de x−15,4 a x+2,8, así que se
+     sortea directamente sobre los dos tramos LIBRES a cada lado del vial en
+     vez de sortear en toda la franja y corregir después: así el reparto sigue
+     siendo uniforme y no se amontonan contra el borde de la calle. */
+  const LARGO_TREN = 15.4;
+  const izquierda = (MEDIO - CALLE - 2.8) - (-560);
+  const derecha = 560 - (MEDIO + CALLE + LARGO_TREN);
+  const xLibre = (u) => (u < izquierda
+    ? -560 + u
+    : MEDIO + CALLE + LARGO_TREN + (u - izquierda));
+
   const flotaAzar = azarCon(5150);
   const CUANTOS = caps.nivel === 'alto' ? 26 : caps.nivel === 'medio' ? 18 : 9;
   const tractoras = new THREE.InstancedMesh(geoTractora, matTractora, CUANTOS);
   const plataformas = new THREE.InstancedMesh(geoPlataforma, matPlata, CUANTOS);
   const cajasPlata = [];
   for (let i = 0; i < CUANTOS; i++) {
-    const x = -560 + flotaAzar() * 1120;
+    const x = xLibre(flotaAzar() * (izquierda + derecha));
     // Dos carriles: el de ida junto a las grúas y el de vuelta hacia el patio
     const z = MEDIDAS.muelle - (flotaAzar() > 0.5 ? 46 : 62);
     dummy.rotation.set(0, 0, 0);

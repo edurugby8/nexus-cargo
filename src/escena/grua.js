@@ -21,6 +21,29 @@ const G = MEDIDAS.grua;
 const APOYO = 0.7;
 
 /**
+ * Media distancia entre las dos patas de un mismo carril: el HUECO del
+ * pórtico, por el que tienen que pasar dos cosas.
+ *
+ * Estaba en 7, o sea catorce metros de eje a eje y ONCE METROS Y CUARENTA de
+ * paso libre. Un contenedor de cuarenta pies mide 12,19 y el spreader que lo
+ * agarra, 12,60: la carga no cabía por el hueco de su propia grúa, así que al
+ * arriarla sobre el camión ATRAVESABA las dos patas. No era un problema de
+ * cámara —se veía tapada— sino de que ese movimiento es imposible.
+ *
+ * Con 9 quedan dieciocho metros de eje a eje y 15,40 de paso libre: el
+ * spreader entra con metro y medio por banda, que es la holgura real de una
+ * grúa de este tamaño.
+ *
+ * La medida se elige por lo que tiene que caber y NO por dónde está la
+ * cámara. Probé a llevarla a 9,5 y a 12 buscando además despejar la visual, y
+ * las dos veces salió peor: mover una estructura de ocho mil toneladas para
+ * esquivar un objetivo es mover el problema, porque la visual barre ese plano
+ * entera mientras el camión avanza y siempre acaba encontrándola. Si el plano
+ * no ve la maniobra, se corrige el plano.
+ */
+const PORTAL = 9;
+
+/**
  * Celosía: dos cordones y sus diagonales. Barata y se lee a un kilómetro.
  *
  * Los cordones medían medio metro. En una viga de ciento cuatro metros eso es
@@ -90,7 +113,7 @@ export function crearGrua({ x, activa = false, caps }) {
   aDesechar.push(geoPata);
   const zPata = [MEDIDAS.muelle - 4, MEDIDAS.muelle - 4 - G.via];
   for (const z of zPata) {
-    for (const dx of [-7, 7]) {
+    for (const dx of [-PORTAL, PORTAL]) {
       const pata = new THREE.Mesh(geoPata, matEstructura);
       pata.position.set(dx, (G.alto - 20) / 2, z);
       pata.castShadow = true;
@@ -108,7 +131,7 @@ export function crearGrua({ x, activa = false, caps }) {
        bajo cada pata. Así que la pieza correcta y la pieza que no estorba son
        la misma, que es como suelen acabar estas cosas. */
     const geoBogie = new THREE.BoxGeometry(5.4, 1.8, 2.6);
-    for (const dx of [-7, 7]) {
+    for (const dx of [-PORTAL, PORTAL]) {
       const bogie = new THREE.Mesh(geoBogie, matOscuro);
       bogie.position.set(dx, 0.9, z);
       bogie.castShadow = true;
@@ -118,7 +141,7 @@ export function crearGrua({ x, activa = false, caps }) {
   }
 
   // Travesaños entre patas
-  const geoTrav = new THREE.BoxGeometry(16, 1.9, 1.9);
+  const geoTrav = new THREE.BoxGeometry(PORTAL * 2 + 2, 1.9, 1.9);
   aDesechar.push(geoTrav);
   for (const z of zPata) {
     for (const y of [G.alto - 24, (G.alto - 20) * 0.45]) {
@@ -128,9 +151,19 @@ export function crearGrua({ x, activa = false, caps }) {
     }
   }
 
-  // Viga superior: del voladizo sobre el agua a la retro sobre tierra
-  const largoViga = G.voladizo + G.retro;
-  const centroViga = MEDIDAS.muelle - 4 + G.voladizo / 2 - G.retro / 2 + 6;
+  /* Viga superior: del voladizo sobre el agua a la retro sobre tierra.
+     Medía `voladizo + retro` y se centraba a ojo con un «+6», y así no llegaba
+     a donde tiene que llegar: acababa en z = 16 por el lado de tierra cuando
+     el tirante que la sujeta baja hasta −20,5. Faltaba, justamente, la LUZ
+     ENTRE CARRILES, que es por donde el carro tiene que pasar para dejar la
+     caja sobre el camión: la grúa cargaba el camión desde treinta metros más
+     allá de donde terminaba su propia viga.
+     Ahora va de punta a punta: del extremo del voladizo sobre el agua al
+     extremo de la retro sobre tierra, pasando por encima de los dos carriles. */
+  const puntaMar = MEDIDAS.muelle - 4 + G.voladizo;
+  const puntaTierra = MEDIDAS.muelle - 4 - G.via - G.retro;
+  const largoViga = puntaMar - puntaTierra;
+  const centroViga = (puntaMar + puntaTierra) / 2;
   const viga = celosia(largoViga, 5.2, 22, matEstructura, 'x');
   viga.rotation.y = Math.PI / 2;
   viga.position.set(0, G.alto - 19, centroViga);
@@ -141,7 +174,7 @@ export function crearGrua({ x, activa = false, caps }) {
   const torreAlto = G.alto;
   const geoTorre = new THREE.BoxGeometry(2.1, 20, 2.1);
   aDesechar.push(geoTorre);
-  for (const dx of [-7, 7]) {
+  for (const dx of [-PORTAL, PORTAL]) {
     const t = new THREE.Mesh(geoTorre, matEstructura);
     t.position.set(dx, torreAlto - 10, zPata[0] - G.via / 2);
     t.castShadow = true;
@@ -151,15 +184,15 @@ export function crearGrua({ x, activa = false, caps }) {
     const largo = Math.hypot(z2 - z1, 20);
     const geo = new THREE.BoxGeometry(0.95, largo, 0.95);
     aDesechar.push(geo);
-    for (const dx of [-7, 7]) {
+    for (const dx of [-PORTAL, PORTAL]) {
       const m = new THREE.Mesh(geo, matEstructura);
       m.position.set(dx, torreAlto - 10, (z1 + z2) / 2);
       m.rotation.x = Math.atan2(z2 - z1, 20) * -1;
       grupo.add(m);
     }
   };
-  tirante(zPata[0] - G.via / 2, MEDIDAS.muelle - 4 + G.voladizo);
-  tirante(zPata[0] - G.via / 2, MEDIDAS.muelle - 4 - G.via - G.retro);
+  tirante(zPata[0] - G.via / 2, puntaMar);
+  tirante(zPata[0] - G.via / 2, puntaTierra);
 
   // Casa de máquinas y cabina del operador
   const geoCasa = new THREE.BoxGeometry(12, 5, 9);

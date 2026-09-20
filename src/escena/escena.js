@@ -216,9 +216,16 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   const desvio = new THREE.Vector3();
   const tiro = new THREE.Vector3();
   const tanteo = new THREE.Vector3();
+  const cajaSujeto = new THREE.Box3();
+  const centroSujeto = new THREE.Vector3();
+  const tamSujeto = new THREE.Vector3();
+  const esquinas = [0, 1, 2, 3].map(() => new THREE.Vector3());
+  const objetivosSujeto = [];
   /** Grados que la cámara ha tenido que desviarse para librar un estorbo. */
-  let desvioEstorbo = 0;
-  let desvioObjetivo = 0;
+  let subirEstorbo = 0;
+  let subirObjetivo = 0;
+  let rodearEstorbo = 0;
+  let rodearObjetivo = 0;
   let contadorRayo = 0;
 
   let reloj = 0;
@@ -352,22 +359,33 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
      otra para aplicar el que se haya elegido. */
 
   /**
-   * Sitúa `tanteo` en la cámara girada `grados` de elevación alrededor del
-   * punto de mira. Girar alrededor de la mira conserva el encuadre: el sujeto
-   * no se mueve del cuadro, sólo cambia desde dónde se le ve. Devuelve `false`
-   * si el giro metería la cámara bajo tierra, que no es una opción.
+   * Sitúa `tanteo` en la cámara girada alrededor del punto de mira: `subir`
+   * grados de elevación y `rodear` grados de acimut. Girar alrededor de la
+   * mira conserva el encuadre —el sujeto no se mueve del cuadro, sólo cambia
+   * desde dónde se le ve— y devuelve `false` si el giro metería la cámara bajo
+   * tierra, que no es una opción.
+   *
+   * LAS DOS COSAS, y ésta era la carencia de fondo. El esquive sólo sabía
+   * subir y bajar, y contra lo que de verdad tapa en un puerto —la pata de una
+   * grúa: una columna de dos metros y medio de lado y SESENTA Y DOS de alto—
+   * la elevación no sirve de nada, porque por arriba no se acaba nunca. Una
+   * pata se esquiva por el lado, y eso es acimut. Estuve moviendo la grúa
+   * —estrechar el pórtico, ensancharlo, retrasar el camión— para apartarla del
+   * objetivo, y cada cambio arreglaba un plano y rompía otro, que es lo que
+   * pasa cuando se mueve el mundo para tapar una carencia de la cámara.
    */
-  const girarElevacion = (grados) => {
+  const girar = (subir, rodear) => {
     desvio.subVectors(objetivoPos, objetivoMira);
     const largo = desvio.length();
     const horiz = Math.hypot(desvio.x, desvio.z);
     if (horiz < 1e-4 || largo < 1e-4) return false;
-    const elev = clamp(Math.atan2(desvio.y, horiz) + grados * GRADO, -1.3, 1.3);
+    const elev = clamp(Math.atan2(desvio.y, horiz) + subir * GRADO, -1.3, 1.3);
+    const azim = Math.atan2(desvio.x, desvio.z) + rodear * GRADO;
     const nuevoHoriz = Math.cos(elev) * largo;
     tanteo.set(
-      objetivoMira.x + (desvio.x / horiz) * nuevoHoriz,
+      objetivoMira.x + Math.sin(azim) * nuevoHoriz,
       objetivoMira.y + Math.sin(elev) * largo,
-      objetivoMira.z + (desvio.z / horiz) * nuevoHoriz,
+      objetivoMira.z + Math.cos(azim) * nuevoHoriz,
     );
     return tanteo.y >= ALTURA_MINIMA;
   };
@@ -381,23 +399,49 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
    * un montante para que la cámara reaccione.
    */
   const rayosBloqueados = (desde) => {
-    tiro.subVectors(objetivoMira, desde);
-    const hasta = tiro.length();
-    const h = Math.hypot(tiro.x, tiro.z) || 1;
-    // Marco horizontal alrededor de la mirada: hacia dónde y hacia los lados
-    const fx = tiro.x / h; const fz = tiro.z / h;
     let n = 0;
-    for (const [lado, frente, baja] of HUELLA) {
-      dirRayo.copy(tiro);
-      dirRayo.x += -fz * lado + fx * frente;
-      dirRayo.z += fx * lado + fz * frente;
-      dirRayo.y -= baja;
-      dirRayo.divideScalar(Math.max(1e-6, dirRayo.length()));
+    for (const o of objetivosSujeto) {
+      tiro.subVectors(o, desde);
+      const hasta = tiro.length();
+      dirRayo.copy(tiro).divideScalar(Math.max(1e-6, hasta));
       rayoCamara.set(desde, dirRayo);
-      rayoCamara.far = Math.max(1, hasta - 3);
+      rayoCamara.far = Math.max(1, hasta - 1.5);
       if (rayoCamara.intersectObjects(obstaculos, false).length) n++;
     }
     return n;
+  };
+
+  /**
+   * Los cinco puntos del SUJETO hacia los que se tira: su centro y cuatro
+   * esquinas de su caja, en la mitad baja.
+   *
+   * Antes se tiraba a un punto y a dos costados a siete metros, que es una
+   * huella inventada. El sujeto tiene un tamaño y el guion dice cuál es: el
+   * buque son 294 metros y el camión, 16,5. Con la huella inventada, la cámara
+   * daba por despejado un plano en el que la pata de una grúa le tapaba la
+   * cola al camión, porque hacia donde miraba no había nada.
+   */
+  const refrescarSujeto = () => {
+    const obj = ({ barco, contenedor: heroe, camion })[pose.ancla];
+    objetivosSujeto.length = 0;
+    if (!obj || !obj.visible) { objetivosSujeto.push(objetivoMira); return; }
+    cajaSujeto.setFromObject(obj);
+    if (cajaSujeto.isEmpty()) { objetivosSujeto.push(objetivoMira); return; }
+    cajaSujeto.getCenter(centroSujeto);
+    cajaSujeto.getSize(tamSujeto);
+    objetivosSujeto.push(centroSujeto);
+    let i = 0;
+    for (const sx of [-0.35, 0.35]) {
+      for (const sz of [-0.35, 0.35]) {
+        esquinas[i].set(
+          centroSujeto.x + tamSujeto.x * sx,
+          centroSujeto.y + tamSujeto.y * 0.2,
+          centroSujeto.z + tamSujeto.z * sz,
+        );
+        objetivosSujeto.push(esquinas[i]);
+        i++;
+      }
+    }
   };
 
   /* Los ángulos que se tantean, ordenados por lo poco que mueven la cámara: el
@@ -410,18 +454,16 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
      encima del arco, y se iba a ciento sesenta y un metros de altura: el rayo
      quedaba limpio y el plano, destrozado. Un esquive es un ajuste, no un
      cambio de plano; si hacen falta más de trece grados, el problema es el
-     guion y se arregla escribiendo el plano, no empujando la cámara. */
-  const DESVIOS = [0, -6, 7, -13, 14];
+     guion y se arregla escribiendo el plano, no empujando la cámara.
 
-  /* A dónde se tira cada rayo, alrededor del punto de mira: [lado, frente,
-     baja] en metros. No basta con apuntar al centro del sujeto —un camión mide
-     dieciséis metros y medio y lo que se le tapa es la COLA, no el centro—, así
-     que se cubre su huella: los costados, el morro, la cola y por debajo. Ésa
-     es la diferencia entre «el punto de mira está despejado» y «se ve el
-     camión». */
-  const HUELLA = [
-    [0, 0, 0], [-7, 0, 0], [7, 0, 0], [0, 8, 1.2], [0, -8, 1.2],
+     Hay tantos desvíos de acimut como de elevación porque los dos estorbos de
+     esta historia son de naturaleza distinta: la viga se libra por debajo y la
+     pata, por el lado. */
+  const DESVIOS = [
+    [0, 0], [-6, 0], [7, 0], [0, -6], [0, 6],
+    [-13, 0], [13, 0], [0, -12], [0, 12], [-7, -7], [-7, 7],
   ];
+
 
   function encuadre(fovBase, aspecto) {
     const horizontalRef = 2 * Math.atan(Math.tan((fovBase * GRADO) / 2) * ASPECTO_REF);
@@ -545,25 +587,32 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
        menos rayos deje bloqueados; y si todos empatan, ninguno: apartarse sin
        ganar nada sólo estropea el plano que pide el guion. */
     if (obstaculos.length && (forzado !== null || (contadorRayo++ & 3) === 0)) {
-      let mejor = 0;
+      refrescarSujeto();
+      let mejor = DESVIOS[0];
       let mejorBloqueo = 99;
-      for (const grados of DESVIOS) {
-        if (!girarElevacion(grados)) continue;
+      for (const par of DESVIOS) {
+        if (!girar(par[0], par[1])) continue;
         const b = rayosBloqueados(tanteo);
-        if (b < mejorBloqueo) { mejorBloqueo = b; mejor = grados; }
+        if (b < mejorBloqueo) { mejorBloqueo = b; mejor = par; }
         if (b === 0) break;
       }
-      desvioObjetivo = mejor;
+      subirObjetivo = mejor[0];
+      rodearObjetivo = mejor[1];
     }
     /* Con el progreso impuesto desde fuera —las pruebas— el esquive se aplica
        ENTERO y de golpe. Amortiguarlo ahí mediría a dónde ha llegado la
        cámara en dieciséis milisegundos, que es prácticamente donde estaba, y
        la prueba acabaría midiendo la inercia en vez del resultado. */
-    desvioEstorbo = forzado !== null
-      ? desvioObjetivo
-      : damp(desvioEstorbo, desvioObjetivo, 2.2, dt);
+    if (forzado !== null) {
+      subirEstorbo = subirObjetivo;
+      rodearEstorbo = rodearObjetivo;
+    } else {
+      subirEstorbo = damp(subirEstorbo, subirObjetivo, 2.2, dt);
+      rodearEstorbo = damp(rodearEstorbo, rodearObjetivo, 2.2, dt);
+    }
 
-    if (Math.abs(desvioEstorbo) > 0.2 && girarElevacion(desvioEstorbo)) {
+    if ((Math.abs(subirEstorbo) > 0.2 || Math.abs(rodearEstorbo) > 0.2)
+      && girar(subirEstorbo, rodearEstorbo)) {
       objetivoPos.copy(tanteo);
     }
 
@@ -766,6 +815,14 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
            película. */
         st.entrada = 1;
         inicioEntrada = 0;
+        /* DOS pasadas, no una. En un fotograma, la cámara se calcula ANTES de
+           que el mundo se mueva: el esquive de estorbos mira dónde estaba el
+           camión, no dónde está. En marcha eso son dieciséis milisegundos y no
+           se nota, pero una sonda que salta de un progreso a otro arrastraría
+           el mundo de la muestra anterior y mediría una cámara que nunca
+           existió —y de paso daría resultados distintos según el orden de las
+           muestras—. La primera pasada coloca el mundo; la segunda, la cámara. */
+        pintar();
         anterior = performance.now() - 16;
         pintar();
         forzado = null;

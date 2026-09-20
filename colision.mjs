@@ -37,6 +37,16 @@ const HOLGURA = 0.5;
 /** Cuántas paradas por capítulo. El camión recorre 900 m: hace falta densidad. */
 const PASOS = 90;
 
+/* EN LOS DOS NIVELES, y ésta es la parte que faltaba.
+   El nivel de calidad no cambia sólo la resolución: cambia CUÁNTA cosa hay.
+   El patio pasa de seis bloques a veinticuatro y la flota de tractores de
+   nueve a veintiséis. El banco de pruebas corre sin tarjeta gráfica, así que
+   se le asigna «bajo», y en bajo la flota era tan corta que ninguno de sus
+   nueve tractores caía en el carril del camión: la prueba daba verde mientras
+   cualquiera con un portátil normal veía el camión atravesar contenedores.
+   Una prueba que sólo mira el escenario que nadie ve no es una prueba. */
+const NIVELES = (process.env.NIVELES || 'alto,bajo').split(',');
+
 let fallos = 0;
 const ok = (m) => console.log(`  ok   ${m}`);
 const mal = (m) => { fallos++; console.log(`  FALLA ${m}`); };
@@ -165,32 +175,97 @@ const SONDA = () => {
 
 console.log('\nPRUEBAS DE COLISIÓN · NEXUS CARGO');
 
-const ctx = await nav.newContext({ viewport: { width: 1440, height: 900 } });
-const pag = await ctx.newPage();
-await pag.addInitScript(() => { window.__debugNX = true; });
-await pag.goto(`http://127.0.0.1:${PUERTO}/nexus-cargo/`, { waitUntil: 'load' });
-await pag.waitForFunction(() => window.__escenaNX && window.__escenaNX.fotogramas > 4, null, { timeout: 60000 });
-await pag.evaluate(SONDA);
+for (const nivel of NIVELES) {
+  const ctx = await nav.newContext({ viewport: { width: 1440, height: 900 } });
+  const pag = await ctx.newPage();
+  await pag.addInitScript(() => { window.__debugNX = true; });
+  await pag.goto(`http://127.0.0.1:${PUERTO}/nexus-cargo/?calidad=${nivel}`, { waitUntil: 'load' });
+  await pag.waitForFunction(() => window.__escenaNX && window.__escenaNX.fotogramas > 4, null, { timeout: 60000 });
+  await pag.evaluate(SONDA);
 
-const tramos = await pag.evaluate(() => window.__escenaNX.tramos.map((t) => [t.id, t.desde, t.hasta]));
-for (const [id, desde, hasta] of tramos) {
-  const peores = new Map();
-  for (let i = 0; i <= PASOS; i++) {
-    const p = desde + (hasta - desde) * (i / PASOS);
-    const r = await pag.evaluate(([p, h]) => window.__colision(p, h), [p, HOLGURA]);
-    for (const g of r.golpes) {
-      const antes = peores.get(g.quien);
-      if (!antes || g.solape > antes.solape) peores.set(g.quien, { ...g, p, camion: r.camion });
+  console.log(`\n── calidad ${nivel} ──`);
+
+  const tramos = await pag.evaluate(() => window.__escenaNX.tramos.map((t) => [t.id, t.desde, t.hasta]));
+  for (const [id, desde, hasta] of tramos) {
+    const peores = new Map();
+    for (let i = 0; i <= PASOS; i++) {
+      const p = desde + (hasta - desde) * (i / PASOS);
+      const r = await pag.evaluate(([p, h]) => window.__colision(p, h), [p, HOLGURA]);
+      for (const g of r.golpes) {
+        const antes = peores.get(g.quien);
+        if (!antes || g.solape > antes.solape) peores.set(g.quien, { ...g, p, camion: r.camion });
+      }
     }
+    if (!peores.size) { ok(`${nivel} · ${id}: el camión no atraviesa nada`); continue; }
+    const lista = [...peores.values()]
+      .sort((a, b) => b.solape - a.solape)
+      .map((g) => `${g.quien} (${g.solape} m en p=${g.p.toFixed(3)}, junto a ${g.donde})`);
+    mal(`${nivel} · ${id}: el camión atraviesa ${lista.join(' · ')}`);
   }
-  if (!peores.size) { ok(`${id}: el camión no atraviesa nada`); continue; }
-  const lista = [...peores.values()]
-    .sort((a, b) => b.solape - a.solape)
-    .map((g) => `${g.quien} (${g.solape} m en p=${g.p.toFixed(3)}, junto a ${g.donde})`);
-  mal(`${id}: el camión atraviesa ${lista.join(' · ')}`);
+
+  await ctx.close();
 }
 
-await ctx.close();
+/* ── EL RELEVO DE LA CARGA ────────────────────────────────────────────
+   Mientras la grúa la sujeta, la carga la coloca el GUION; en cuanto la
+   suelta, la coloca la matriz del camión. Son dos cuentas distintas para la
+   misma cosa, y si no dan el mismo número el contenedor SALTA en el fotograma
+   del relevo. Daba 6,4 m hacia atrás y metro y medio hacia abajo: la grúa lo
+   posaba sobre la cabina y al soltarlo aparecía hundido en el remolque, así
+   iba el resto del viaje. Se comprueba que no haya salto y que la caja apoye
+   de verdad sobre la plataforma. */
+{
+  const ctx = await nav.newContext({ viewport: { width: 1440, height: 900 } });
+  const pag = await ctx.newPage();
+  await pag.addInitScript(() => { window.__debugNX = true; });
+  await pag.goto(`http://127.0.0.1:${PUERTO}/nexus-cargo/?calidad=alto`, { waitUntil: 'load' });
+  await pag.waitForFunction(() => window.__escenaNX && window.__escenaNX.fotogramas > 4, null, { timeout: 60000 });
+
+  const tramos = await pag.evaluate(() => window.__escenaNX.tramos.map((t) => [t.id, t.desde, t.hasta]));
+  const grua = tramos.find((t) => t[0] === 'grua');
+  const fin = tramos.find((t) => t[0] === 'aduanas');
+  /* Se mide EL PASO DEL RELEVO, no el paso más grande. Medir el mayor de
+     todos marcaba la bajada del gancho —diecinueve metros de arriada en un
+     suspiro, que es lo que hace una grúa— y tapaba lo que se busca, que es
+     el corte del cambio de dueño. */
+  let salto = null;
+  let peorApoyo = 0;
+  let anterior = null;
+  let eraSuelto = null;
+  for (let p = grua[1] + (grua[2] - grua[1]) * 0.7; p < fin[1] + 0.02; p += 0.001) {
+    const r = await pag.evaluate((p) => {
+      const e = window.__escenaNX;
+      e.irA(p);
+      e.escena.updateMatrixWorld(true);
+      const caja = new e.THREE.Box3().setFromObject(e.heroe);
+      return {
+        pos: [e.heroe.position.x, e.heroe.position.y, e.heroe.position.z],
+        bajo: caja.min.y,
+        plataforma: e.camion.position.y + e.MEDIDAS.camion.plataforma,
+        suelto: !e.mundo().grua.contenedor,
+      };
+    }, p);
+    if (anterior && eraSuelto === false && r.suelto) {
+      salto = { d: Math.hypot(...r.pos.map((v, i) => v - anterior[i])), p };
+    }
+    anterior = r.pos;
+    eraSuelto = r.suelto;
+    // Una vez apoyada, la caja tiene que descansar sobre la plataforma
+    if (r.suelto) peorApoyo = Math.max(peorApoyo, Math.abs(r.bajo - r.plataforma));
+  }
+  /* Umbral: en el relevo la carga ya está posada y el camión aún no ha
+     arrancado, así que entre un paso y el siguiente no debe moverse más que
+     unos centímetros. Medio metro ya no es movimiento, es un corte. */
+  if (!salto) mal('no se ha encontrado el relevo de la carga: la prueba no está mirando donde cree');
+  else if (salto.d < 0.5) ok(`la carga pasa de la grúa al camión sin saltar (${(salto.d * 100).toFixed(0)} cm en el relevo)`);
+  else mal(`la carga SALTA ${salto.d.toFixed(2)} m en p=${salto.p.toFixed(3)} al cambiar de dueño`);
+  peorApoyo < 0.12
+    ? ok(`la carga apoya sobre la plataforma (desviación máxima ${(peorApoyo * 100).toFixed(0)} cm)`)
+    : mal(`la carga no apoya: queda ${(peorApoyo * 100).toFixed(0)} cm fuera de la plataforma del remolque`);
+
+  await ctx.close();
+}
+
 await nav.close();
 sv.close();
 console.log(fallos ? `\n${fallos} FALLOS\n` : '\nEl camión no atraviesa nada en todo el recorrido.\n');

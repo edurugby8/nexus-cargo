@@ -99,6 +99,16 @@ export function medirEquipo() {
   if (nucleos <= 4 || memoria <= 3 || ancho < 760) nivel = 'bajo';
   if (nucleos <= 2 || memoria <= 2) nivel = 'minimo';
 
+  /* `?calidad=alto` fuerza el nivel.
+     No es un capricho de depuración: el nivel cambia CUÁNTA geometría hay —el
+     patio pasa de seis bloques a veinticuatro— y sin poder fijarlo, el banco
+     de pruebas medía siempre en «bajo», que es el nivel que le toca a un
+     contenedor sin tarjeta gráfica, mientras el visitante con un portátil
+     normal ve «alto». Dos escenarios distintos, y las pruebas verdes en el
+     que nadie mira. */
+  const pedido = new URLSearchParams(window.location.search).get('calidad');
+  if (['alto', 'medio', 'bajo', 'minimo'].includes(pedido)) nivel = pedido;
+
   const webgl = (() => {
     try {
       const c = document.createElement('canvas');

@@ -81,7 +81,14 @@ export const MEDIDAS = {
   contenedor: { largo: 12.19, ancho: 2.44, alto: 2.90 },   // 40' High Cube
   buque: { eslora: 294, manga: 48, francobordo: 14, casco: 11 },
   grua: { alto: 82, luz: 52, voladizo: 78, retro: 26, via: 30.5 },
-  camion: { largo: 16.5, ancho: 2.55, alto: 4.0, plataforma: 1.25 },
+  /* `apoyo` es lo que hay del origen del camión al CENTRO de su carga, hacia
+     atrás. Una tractora con semirremolque no lleva la caja encima del morro:
+     la lleva seis metros y medio por detrás, sobre la quinta rueda. Este
+     número estaba escrito a mano en el camión y no existía en el guion, así
+     que la grúa bajaba el contenedor sobre la CABINA y al soltarlo saltaba
+     6,4 m hacia atrás y se hundía metro y medio dentro del remolque. Ahora es
+     una sola medida y los dos la leen de aquí. */
+  camion: { largo: 16.5, ancho: 2.55, alto: 4.0, plataforma: 1.25, apoyo: 6.4 },
   muelle: 40,          // z del canto del muelle
   amarre: { x: 0, z: 95 },
   gruaX: 20,           // la grúa que trabaja nuestro contenedor
@@ -198,7 +205,8 @@ export function gruaEn(p, ajustes = { velocidadGrua: 1, oscilacion: 1 }) {
   const despues = p >= TRAMOS[3].desde;
 
   const zBuque = MEDIDAS.amarre.z;
-  const zCamion = MEDIDAS.camionEspera.z;
+  // Donde la grúa deja la carga: sobre la PLATAFORMA, no sobre la cabina
+  const zCamion = MEDIDAS.camionEspera.z + MEDIDAS.camion.apoyo;
   const yCubierta = 32.5;        // parte alta de la pila donde viaja el nuestro
   // La plataforma del remolque se mide desde el firme, no desde la cota cero
   const yCamion = sueloEn(MEDIDAS.camionEspera.z)
@@ -370,7 +378,8 @@ export function gruaEn(p, ajustes = { velocidadGrua: 1, oscilacion: 1 }) {
 function carroDe(t) {
   const { nombre, local } = pasoEn(clamp(t));
   const zBuque = MEDIDAS.amarre.z;
-  const zCamion = MEDIDAS.camionEspera.z;
+  // Donde la grúa deja la carga: sobre la PLATAFORMA, no sobre la cabina
+  const zCamion = MEDIDAS.camionEspera.z + MEDIDAS.camion.apoyo;
   if (nombre === 'aproxima') return lerp(zBuque + 26, zBuque, entradaSalida(local));
   if (nombre === 'traslada') return lerp(zBuque, zCamion + 4, suave(0, 1, local));
   if (nombre === 'frena') return lerp(zCamion + 4, zCamion, salidaCubica(local));
@@ -971,6 +980,11 @@ export function poseEn(p, salida = {}, estrecho = false) {
   salida.dist = dist;
   salida.elev = elev;
   salida.azim = azim;
+  /* A QUÉ se está mirando. Lo necesita el esquive de estorbos: para saber si
+     algo tapa al sujeto hay que saber cuál es el sujeto y, sobre todo, cuánto
+     ocupa. Un camión mide dieciséis metros y medio; comprobar sólo el punto de
+     mira deja fuera precisamente lo que se le tapa, que es la cola. */
+  salida.ancla = t < 0.5 ? c1.ancla : c2.ancla;
   return salida;
 }
 
