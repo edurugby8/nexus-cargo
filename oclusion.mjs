@@ -43,6 +43,11 @@ const SUJETO = {
 
 /** Cuánto del sujeto puede quedar tapado sin que estorbe. */
 const TAPADO = 0.34;
+
+/* En los dos extremos de calidad. El nivel no cambia sólo la resolución:
+   cambia cuánta geometría hay delante, así que una cámara despejada en «bajo»
+   puede estar mirando una pata de grúa en «alto». */
+const NIVELES = (process.env.NIVELES || 'alto,bajo').split(',');
 /**
  * Y cuánto se mide SOSTENIDO, no en un fotograma suelto.
  *
@@ -192,14 +197,17 @@ const SONDA = () => {
 
 console.log('\nPRUEBAS DE OCLUSIÓN · NEXUS CARGO');
 
-for (const [nombre, vp] of [
-  ['escritorio', { width: 1440, height: 900 }],
-  ['móvil', { width: 390, height: 844 }],
-]) {
+const VISTAS = [];
+for (const nivel of NIVELES) {
+  VISTAS.push([`${nivel} · escritorio`, { width: 1440, height: 900 }, nivel]);
+  VISTAS.push([`${nivel} · móvil`, { width: 390, height: 844 }, nivel]);
+}
+
+for (const [nombre, vp, nivel] of VISTAS) {
   const ctx = await nav.newContext({ viewport: vp });
   const pag = await ctx.newPage();
   await pag.addInitScript(() => { window.__debugNX = true; });
-  await pag.goto(`http://127.0.0.1:${PUERTO}/nexus-cargo/`, { waitUntil: 'load' });
+  await pag.goto(`http://127.0.0.1:${PUERTO}/nexus-cargo/?calidad=${nivel}`, { waitUntil: 'load' });
   await pag.waitForFunction(() => window.__escenaNX && window.__escenaNX.fotogramas > 4, null, { timeout: 60000 });
   await pag.evaluate(SONDA);
 

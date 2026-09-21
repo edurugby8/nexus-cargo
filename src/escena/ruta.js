@@ -100,6 +100,42 @@ export const MEDIDAS = {
   destino: -812,
 };
 
+/**
+ * EL CARRIL DEL CAMIÓN.
+ *
+ * Un pasillo continuo y despejado desde donde la grúa deja el contenedor
+ * sobre el remolque hasta pasada la barrera de salida. Aquí está escrito una
+ * sola vez y de aquí lo leen los tres que tienen que estar de acuerdo: el
+ * patio, que se aparta; la prueba, que comprueba que nadie se ha metido; y la
+ * cámara, que sabe por dónde va a pasar el camión.
+ *
+ * Hasta ahora esto no existía. Había un `x = 20` repetido en media docena de
+ * sitios y cada objeto se colocaba por su cuenta, así que cada vez que algo se
+ * metía en el paso había que descubrirlo mirando, corregir ESE objeto, y
+ * esperar al siguiente. Un carril declarado convierte eso en una invariante:
+ * no se comprueba que el camión no chocara en los puntos que a uno se le
+ * ocurrió muestrear, se comprueba que EL PASILLO ESTÁ VACÍO, que es una
+ * propiedad del mundo y no del muestreo.
+ *
+ * Las medidas: el camión mide 2,55 de ancho y 4,75 con el contenedor encima.
+ * Cuatro metros a cada lado del eje dejan 2,7 de holgura por banda —más que
+ * un carril de autopista— y el gálibo de 6,5 pasa por debajo del dintel del
+ * escáner, que arranca a 8,3.
+ *
+ * Lo que SÍ puede estar dentro va marcado `franqueable`: el carril de la grúa,
+ * que va embebido en el pavimento y se cruza como en cualquier puerto, y el
+ * brazo de la barrera, que está para cortar el paso y se levanta antes de que
+ * el camión llegue. Esos dos se comprueban aparte.
+ */
+export const CORREDOR = {
+  x: MEDIDAS.gruaX,
+  media: 4,                                          // media anchura libre
+  alto: 6.5,                                         // gálibo
+  patio: 36,                                         // retranqueo del patio
+  desde: MEDIDAS.camionEspera.z + 18,                // por detrás del remolque
+  hasta: MEDIDAS.barrera - 14,                       // pasada la barrera
+};
+
 /* ── El buque ─────────────────────────────────────────────────────── */
 
 /**

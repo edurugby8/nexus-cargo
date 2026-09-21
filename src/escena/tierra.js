@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import { MEDIDAS } from './ruta.js';
+import { MEDIDAS, CORREDOR } from './ruta.js';
 import { azarCon, lerp, clamp } from '../lib/util.js';
 import { crearPilas } from './contenedor.js';
 import {
@@ -102,6 +102,9 @@ export function crearPuerto({ caps }) {
   aDesechar.push(geoCarril);
   for (const z of [MEDIDAS.muelle - 4, MEDIDAS.muelle - 4 - MEDIDAS.grua.via]) {
     const c = new THREE.Mesh(geoCarril, matEstructura);
+    /* Embebido en su bancada y cruzado por el vial: se pasa por encima, como
+       en cualquier muelle. No es un obstáculo, es pavimento con un raíl. */
+    c.userData.franqueable = true;
     c.position.set(0, 0.56, z);
     grupo.add(c);
   }
@@ -134,8 +137,8 @@ export function crearPuerto({ caps }) {
      deja una calle de 72 metros centrada en la ruta —sitio para el camión y
      para que la cámara lo siga por detrás— y los bloques se reparten a los dos
      lados. El ancho no es caprichoso: la cámara llega a 46 m del eje. */
-  const CALLE = 36;                       // media anchura de la calle libre
-  const MEDIO = MEDIDAS.gruaX;            // por donde circula el camión
+  const CALLE = CORREDOR.patio;           // retranqueo del patio, del guion
+  const MEDIO = CORREDOR.x;               // por donde circula el camión
   const ANCHO_BLOQUE = (COLS - 1) / 2 * 12.79 + 6.1;
 
   const bloques = [];
@@ -453,12 +456,19 @@ export function crearAduanas() {
   const base = new THREE.Mesh(geoBase, matOscuro);
   base.position.set(X + 5.2, 0.6, MEDIDAS.barrera);
   grupo.add(base);
-  const geoBrazo = new THREE.BoxGeometry(0.16, 0.34, 10.4);
+  /* El brazo CRUZA la carretera. Medía 10,4 metros a lo LARGO de Z, o sea
+     tendido en paralelo al carril y a cinco metros de él: una barrera que no
+     barraba nada, apuntando carretera abajo, y que subía girando sobre el eje
+     equivocado. Ahora sale del poste hacia el eje del carril, lo cruza entero
+     y se levanta girando sobre Z, que es lo que hace una barrera. */
+  const LARGO_BRAZO = 5.2 + CORREDOR.media + 1.4;
+  const geoBrazo = new THREE.BoxGeometry(LARGO_BRAZO, 0.34, 0.16);
   const brazo = new THREE.Mesh(geoBrazo, matNaranja);
   brazo.castShadow = true;
+  brazo.userData.franqueable = true;      // está para cortar el paso, y se abre
   const pivote = new THREE.Group();
   pivote.position.set(X + 5.2, 1.3, MEDIDAS.barrera);
-  brazo.position.z = -5.2;
+  brazo.position.x = -LARGO_BRAZO / 2;
   pivote.add(brazo);
   grupo.add(pivote);
   aDesechar.push(geoBase, geoBrazo);
@@ -482,7 +492,7 @@ export function crearAduanas() {
     luzRoja.material = a.verde ? matApagado : matRojo;
     luzVerde.material = a.verde ? matVerde : matApagado;
     // La barrera sube girando sobre su base, no se desvanece
-    pivote.rotation.x = a.barrera * (Math.PI / 2) * 0.92;
+    pivote.rotation.z = -a.barrera * (Math.PI / 2) * 0.92;
   };
   grupo.userData.liberar = () => aDesechar.forEach((o) => o.dispose?.());
   return grupo;

@@ -17,7 +17,7 @@ import * as THREE from 'three';
 import { clamp, damp, lerp, medirEquipo } from '../lib/util.js';
 import { AJUSTES } from '../ajustes.js';
 import {
-  poseEn, mundoEn, MEDIDAS, TRAMOS, ALTURAS, capituloEn, inicioDe,
+  poseEn, mundoEn, MEDIDAS, CORREDOR, TRAMOS, ALTURAS, capituloEn, inicioDe,
 } from './ruta.js';
 import { fijarResolucion } from './texturas.js';
 import { fijarResolucionMateriales, liberarMateriales } from './materiales.js';
@@ -795,7 +795,7 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   if (window.__debugNX) {
     window.__escenaNX = {
       THREE, escena, camara, renderer, barco, gruas, camion, heroe, st, AJUSTES, MEDIDAS,
-      puerto, aduanas, carretera, centro, destino, mar, tramos: TRAMOS,
+      puerto, aduanas, carretera, centro, destino, mar, tramos: TRAMOS, CORREDOR,
       get fotogramas() { return fotogramas; },
       get freno() { return { escalon, medioFotograma: Math.round(medioFotograma) }; },
       mundo: () => mundoEn(st.progreso, AJUSTES),

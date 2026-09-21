@@ -30,10 +30,15 @@ const TIPOS = {
   '.xml': 'application/xml', '.txt': 'text/plain',
 };
 
-/* Holgura. Dos cuerpos que se rozan por un centímetro no se ven atravesados, y
-   exigir separación exacta convertiría cualquier redondeo en un fallo. Medio
-   metro es lo que se nota a simple vista. */
-const HOLGURA = 0.5;
+/* MARGEN DE SEGURIDAD, y va en el sentido contrario al que tenía.
+   Antes esto ENCOGÍA la caja del camión medio metro «porque rozar no es
+   atravesar»: o sea que cualquier cosa que se metiera hasta cuarenta y nueve
+   centímetros dentro del camión pasaba la prueba. Al revés. La caja se ENSANCHA
+   treinta y cinco centímetros por cada cara, de modo que lo que se exige no es
+   que no se toquen, sino que quede aire entre medias. Lo que legítimamente se
+   cruza a nivel —el carril de la grúa— o se abre al paso —el brazo de la
+   barrera— va marcado `franqueable` y se comprueba aparte. */
+const MARGEN = 0.35;
 /** Cuántas paradas por capítulo. El camión recorre 900 m: hace falta densidad. */
 const PASOS = 90;
 
@@ -45,7 +50,7 @@ const PASOS = 90;
    nueve tractores caía en el carril del camión: la prueba daba verde mientras
    cualquiera con un portátil normal veía el camión atravesar contenedores.
    Una prueba que sólo mira el escenario que nadie ve no es una prueba. */
-const NIVELES = (process.env.NIVELES || 'alto,bajo').split(',');
+const NIVELES = (process.env.NIVELES || 'alto,medio,bajo,minimo').split(',');
 
 let fallos = 0;
 const ok = (m) => console.log(`  ok   ${m}`);
@@ -118,9 +123,8 @@ const SONDA = () => {
       cajaOtro.setFromObject(e.heroe);
       if (!cajaOtro.isEmpty()) cajaSujeto.union(cajaOtro);
     }
-    // Se encoge la caja: rozar no es atravesar
-    cajaSujeto.expandByScalar(-holgura);
-    if (cajaSujeto.isEmpty()) return { golpes: [] };
+    // Se ensancha la caja: no basta con no tocarse, tiene que sobrar sitio
+    cajaSujeto.expandByScalar(holgura);
 
     const golpes = new Map();
     const anotar = (o, caja) => {
@@ -144,7 +148,13 @@ const SONDA = () => {
       /* Ni los EFECTOS. La cortina del escáner es un plano aditivo de nueve
          metros que el camión tiene que atravesar —de eso va la inspección—, y
          contarlo como colisión es confundir la luz con el acero. */
-      if (o.userData.efecto) return;
+      if (o.userData.efecto || o.userData.franqueable) return;
+      /* Ni el APAREJO de la grúa. El spreader va cuarenta y seis centímetros
+         por encima de la tapa del contenedor porque es lo que lo está
+         sujetando: con el margen de seguridad puesto, las dos cajas se tocan
+         por definición mientras dura la maniobra. Medirlo como choque es
+         contar como accidente el hecho de que la grúa agarre la carga. */
+      if (o.userData.aparejo) return;
       const mat = Array.isArray(o.material) ? o.material[0] : o.material;
       if (mat && mat.transparent && mat.depthWrite === false) return;
       let padre = o;
@@ -190,7 +200,7 @@ for (const nivel of NIVELES) {
     const peores = new Map();
     for (let i = 0; i <= PASOS; i++) {
       const p = desde + (hasta - desde) * (i / PASOS);
-      const r = await pag.evaluate(([p, h]) => window.__colision(p, h), [p, HOLGURA]);
+      const r = await pag.evaluate(([p, h]) => window.__colision(p, h), [p, MARGEN]);
       for (const g of r.golpes) {
         const antes = peores.get(g.quien);
         if (!antes || g.solape > antes.solape) peores.set(g.quien, { ...g, p, camion: r.camion });
@@ -262,6 +272,53 @@ for (const nivel of NIVELES) {
   peorApoyo < 0.12
     ? ok(`la carga apoya sobre la plataforma (desviación máxima ${(peorApoyo * 100).toFixed(0)} cm)`)
     : mal(`la carga no apoya: queda ${(peorApoyo * 100).toFixed(0)} cm fuera de la plataforma del remolque`);
+
+  /* LA BARRERA, que es lo único que puede cortar el carril a propósito.
+     Está marcada `franqueable` y por eso las otras dos pruebas la dejan pasar,
+     así que aquí se comprueba lo que de verdad importa: que cuando el morro
+     del camión llega a ella, el brazo ya no está en el paso. Sin esto,
+     `franqueable` sería una excusa para no mirar. */
+  let peorBrazo = 99;
+  let dondeBrazo = 0;
+  for (let p = fin[1]; p < 0.60; p += 0.002) {
+    const r = await pag.evaluate((p) => {
+      const e = window.__escenaNX;
+      e.irA(p);
+      e.escena.updateMatrixWorld(true);
+      const C = e.CORREDOR;
+      let bajo = 99;
+      e.aduanas.traverse((o) => {
+        if (!o.isMesh || !o.userData.franqueable) return;
+        /* Se recorre el brazo PUNTO A PUNTO, no por su caja envolvente.
+           Levantado ochenta grados, la caja del brazo sigue tocando el borde
+           del carril —por su extremo de abajo, que es el que está clavado en
+           el poste, fuera del paso— y su mínimo en Y es la altura del pivote.
+           Medido así, una barrera abierta del todo parecía cerrada. Lo que
+           importa es a qué altura pasa el brazo POR ENCIMA DEL CARRIL. */
+        o.geometry.computeBoundingBox();
+        const bb = o.geometry.boundingBox;
+        const v = new e.THREE.Vector3();
+        for (let k = 0; k <= 24; k++) {
+          v.set(
+            bb.min.x + (bb.max.x - bb.min.x) * (k / 24),
+            (bb.min.y + bb.max.y) / 2,
+            (bb.min.z + bb.max.z) / 2,
+          ).applyMatrix4(o.matrixWorld);
+          if (Math.abs(v.x - C.x) > C.media) continue;
+          bajo = Math.min(bajo, v.y);
+        }
+      });
+      const caja = new e.THREE.Box3().setFromObject(e.camion);
+      return { bajo, morro: caja.min.z, barrera: e.MEDIDAS.barrera };
+    }, p);
+    // Sólo importa desde que el morro está a veinte metros de la barrera
+    if (r.morro > r.barrera + 20) continue;
+    if (r.morro < r.barrera - 6) break;
+    if (r.bajo < peorBrazo) { peorBrazo = r.bajo; dondeBrazo = p; }
+  }
+  peorBrazo > 5.2
+    ? ok(`la barrera está levantada cuando el camión llega (el brazo sube a ${peorBrazo === 99 ? 'fuera del carril' : `${peorBrazo.toFixed(1)} m`})`)
+    : mal(`la barrera sigue cortando el carril a ${peorBrazo.toFixed(1)} m de altura cuando el camión llega, en p=${dondeBrazo.toFixed(3)}`);
 
   await ctx.close();
 }
