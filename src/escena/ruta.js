@@ -131,7 +131,16 @@ export const CORREDOR = {
   x: MEDIDAS.gruaX,
   media: 4,                                          // media anchura libre
   alto: 6.5,                                         // gálibo
-  patio: 36,                                         // retranqueo del patio
+  /* Lo que se aparta el patio del eje del camión.
+     Estaba en 36 m, que sobre el plano es de sobra —el camión mide 2,55— y
+     sobre la pantalla no lo es: desde una cámara aérea a sesenta metros, una
+     pila de quince metros de alto a treinta y seis de distancia cae pegada al
+     camión en perspectiva y se lee ENCIMA de él. Que la geometría diga que hay
+     treinta y seis metros de asfalto no sirve de nada si lo que se ve es un
+     camión metido entre cajas.
+     Noventa metros es el ancho de un vial de terminal con sus dos calles de
+     servicio, y a esa distancia las pilas quedan claramente a un lado. */
+  patio: 90,                                         // retranqueo del patio
   desde: MEDIDAS.camionEspera.z + 18,                // por detrás del remolque
   hasta: MEDIDAS.barrera - 14,                       // pasada la barrera
 };
