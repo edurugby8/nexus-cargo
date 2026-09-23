@@ -102,24 +102,45 @@ const FRAGMENTO = /* glsl */ `
     vec3 V = normalize(cameraPosition - vMundo);
     vec3 N = normalize(vNormal);
 
-    // Rizado fino: la textura sólo aporta el detalle que la malla no puede
+    /* Rizado en DOS ESCALAS, y ésta es la razón por la que el mar se veía
+       como un papel azul desde arriba.
+       Había una sola capa repetida catorce veces sobre una malla de varios
+       kilómetros: sus rasgos medían doscientos metros. Eso no es rizado, es
+       mancha, y encima a esa escala no la mueve nada. Un mar visto desde
+       doscientos metros de altura se reconoce por el CENTELLEO: miles de
+       caras pequeñas que devuelven el sol cada una a su aire. Así que la
+       segunda capa va veinte veces más fina y en otra dirección, y es la que
+       pone ese temblor. */
     vec3 rizo = texture2D(uDetalle, vUv * 14.0 + vec2(uTiempo * 0.004, uTiempo * 0.003)).rgb;
-    N = normalize(N + vec3((rizo.r - 0.5) * 0.35, 0.0, (rizo.b - 0.5) * 0.35));
+    vec3 fino = texture2D(uDetalle, vUv * 290.0 - vec2(uTiempo * 0.021, uTiempo * -0.014)).rgb;
+    N = normalize(N
+      + vec3((rizo.r - 0.5) * 0.35, 0.0, (rizo.b - 0.5) * 0.35)
+      + vec3((fino.r - 0.5) * 0.30, 0.0, (fino.b - 0.5) * 0.30));
 
     // Fresnel: de canto el agua es un espejo, desde arriba es un cuerpo opaco
     float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
     fres = mix(0.03, 1.0, fres) * uReflejos;
 
+    /* El color del agua tampoco es uno. Un mar de verdad tiene rodales: más
+       oscuro donde el viento riza y más claro donde está plano. Con un solo
+       color, la superficie no tiene escala y lo que se ve es una lámina. */
+    float rodal = texture2D(uDetalle, vUv * 3.0 + vec2(uTiempo * 0.0016, 0.0)).g;
     vec3 agua = mix(uHondo, uSomero, max(dot(N, vec3(0.0, 1.0, 0.0)), 0.0));
+    agua *= 0.86 + rodal * 0.30;
     vec3 color = mix(agua, uCielo, fres);
 
     // Reflejo especular del sol sobre el agua: el destello es lo que hace que
     // se lea la hora del día
     vec3 H = normalize(uDirSol + V);
-    float brillo = pow(max(dot(N, H), 0.0), 220.0);
-    color += uSol * brillo * 2.6 * uReflejos;
-    // Y el camino de luz, más ancho y mucho más tenue
-    color += uSol * pow(max(dot(N, H), 0.0), 16.0) * 0.1 * uReflejos;
+    float nh = max(dot(N, H), 0.0);
+    // El destello duro: puntos sueltos, los que centellean
+    color += uSol * pow(nh, 220.0) * 2.6 * uReflejos;
+    /* Y el CAMINO DE LUZ. Estaba en exponente 16 y al 10 %: invisible. Es lo
+       que dibuja sobre el agua la franja brillante que va del horizonte al
+       observador, y sin él un mar iluminado y un mar en sombra se pintan
+       igual. Con 34 y al 45 % la franja aparece sin quemar el resto. */
+    color += uSol * pow(nh, 34.0) * 0.45 * uReflejos;
+    color += uSol * pow(nh, 6.0) * 0.06 * uReflejos;
 
     /* Niebla exponencial, con la fórmula CORRECTA.
        La primera versión hacía exp(-d*d*densidad), que no es lo que calcula

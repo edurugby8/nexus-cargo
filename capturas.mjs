@@ -38,7 +38,7 @@ for (const [nombre, vp] of [['esc', { width: 1440, height: 900 }], ['mov', { wid
   const ctx = await nav.newContext({ viewport: vp, deviceScaleFactor: 1 });
   const pag = await ctx.newPage();
   await pag.addInitScript(() => { window.__debugNX = true; });
-  await pag.goto('http://127.0.0.1:4418/nexus-cargo/', { waitUntil: 'load' });
+  await pag.goto(`http://127.0.0.1:4418/nexus-cargo/?calidad=${process.env.NIVEL || 'alto'}`, { waitUntil: 'load' });
   await pag.waitForFunction(() => window.__escenaNX && window.__escenaNX.fotogramas > 4, null, { timeout: 60000 });
   await pag.addStyleTag({ content: 'html{scroll-behavior:auto !important} .relato,.nav,.hud,.avance,.controles,.pie{visibility:hidden !important}' });
   const caps = await pag.evaluate(() => [...document.querySelectorAll('.cap')].map((s) => ({ id: s.id, top: s.offsetTop, alto: s.offsetHeight })));

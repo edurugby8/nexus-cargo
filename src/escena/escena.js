@@ -82,10 +82,19 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
      luz rebotada del cielo y del agua es enorme: la cara en sombra de un casco
      nunca es negra. Con el valor bajo, el buque salía como una plancha negra
      recortada y perdía toda la forma que tiene el casco. */
-  const cielo = new THREE.HemisphereLight(0x9ab6d0, 0x46505c, 1.5);
+  /* El REBOTE DEL SUELO, que es lo que faltaba para que las sombras dejaran
+     de ser agujeros.
+     El color de abajo del hemisférico estaba en 0x46505c: un gris azulado muy
+     oscuro, casi negro. Eso dice «lo que hay bajo este objeto no devuelve
+     luz», y es falso en todas partes menos en una mina: un muelle de hormigón
+     claro o un campo seco devuelven bastante, y ése es el relleno que separa
+     una cara en sombra de una mancha negra. Con un tono cálido y bastante más
+     claro, el costado en sombra del buque, el bajo de los contenedores y la
+     cara norte de las naves vuelven a tener forma en vez de recortarse. */
+  const cielo = new THREE.HemisphereLight(0x9ab6d0, 0x7a6e5f, 1.55);
   escena.add(cielo);
 
-  const relleno = new THREE.DirectionalLight(0xbcd2e8, 0.35);
+  const relleno = new THREE.DirectionalLight(0xbcd2e8, 0.42);
   relleno.position.set(140, 60, -120);
   escena.add(relleno);
   escena.add(relleno.target);

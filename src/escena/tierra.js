@@ -12,7 +12,7 @@ import { MEDIDAS, CORREDOR } from './ruta.js';
 import { azarCon, lerp, clamp } from '../lib/util.js';
 import { crearPilas } from './contenedor.js';
 import {
-  texturaHormigon, texturaAsfalto, texturaChapa, texturaNave, texturaMancha,
+  texturaHormigon, texturaAsfalto, texturaChapa, texturaNave, texturaMancha, texturaCampo,
 } from './texturas.js';
 import {
   aceroPintado, aceroDesnudo, hormigon, pintura, luminoso, cristal,
@@ -541,13 +541,14 @@ export function crearCarretera({ caps }) {
     map: mapa, roughness: 0.9, metalness: 0.03,
     normalMap: relieveAsfalto(), normalScale: new THREE.Vector2(0.8, 0.8),
   });
-  const matTierra = new THREE.MeshStandardMaterial({ color: 0x5c5742, roughness: 0.98 });
+  const mapaCampo = texturaCampo('#5c5742', 17);
+  const matTierra = new THREE.MeshStandardMaterial({ map: mapaCampo, roughness: 0.98 });
   const matTalud = new THREE.MeshStandardMaterial({ color: 0x6a6249, roughness: 0.97 });
   const matGuardarrail = aceroDesnudo(0xaeb6bd, 0.44);
   const matPoste = new THREE.MeshStandardMaterial({ color: 0x585e66, roughness: 0.7, metalness: 0.4 });
   const matVerde = new THREE.MeshStandardMaterial({ color: 0x40563a, roughness: 0.95 });
   const matMarca = pintura(0xe8ece9);
-  aDesechar.push(mapa, matAsfalto, matTierra, matTalud, matPoste, matVerde);
+  aDesechar.push(mapa, mapaCampo, matAsfalto, matTierra, matTalud, matPoste, matVerde);
 
   const dummy = new THREE.Object3D();
   const cuantos = Math.round(caps.carretera);
@@ -562,10 +563,15 @@ export function crearCarretera({ caps }) {
   grupo.add(calzada);
   aDesechar.push(geoCalzada);
 
-  /* El arcén, MUY ancho. Con noventa metros el terreno terminaba en un canto
-     recto a media distancia y se veía el borde del mundo; con ochocientos, la
-     niebla se lo come mucho antes de que llegue a notarse. */
-  const geoArcen = new THREE.PlaneGeometry(800, largo);
+  /* El terreno, MUY ancho y MUY LARGO.
+     Era de 800 × `largo`, o sea exactamente lo que dura la carretera, y por eso
+     se veía su borde: mirando carretera abajo desde una cámara aérea, lo que
+     entra en cuadro es el EXTREMO del plano, una recta que cruza la pantalla
+     de lado a lado con el cielo al otro lado. La anchura ya estaba resuelta;
+     faltaba el largo. Con seiscientos metros de más por cada punta, el terreno
+     se acaba mucho más allá del tramo que se recorre y lo que cierra el fondo
+     es la niebla, que es lo que cierra el fondo en el mundo real. */
+  const geoArcen = new THREE.PlaneGeometry(1800, largo + 1200);
   const arcen = new THREE.Mesh(geoArcen, matTierra);
   arcen.rotation.x = -Math.PI / 2;
   arcen.position.set(X, -1.15, centroZ);
@@ -706,16 +712,88 @@ export function crearCarretera({ caps }) {
   mallaFarola.frustumCulled = mallaBrazo.frustumCulled = false;
   grupo.add(mallaFarola, mallaBrazo);
 
-  // Vegetación de talud: masas simples, nunca protagonistas
+  /* ── Arbolado ────────────────────────────────────────────────────
+     Eran esferas de radio 1,5 aplastadas a medio metro de alto y puestas a ras
+     de tierra: desde arriba no se leían como árboles sino como MANCHAS DE
+     MUSGO sobre el terreno, que es lo que delataba el capítulo entero. Un
+     árbol visto desde el aire se reconoce por dos cosas y ninguna es la hoja:
+     que tiene ALTURA —y por tanto proyecta una sombra larga y separada de su
+     base— y que su copa es un volumen con luz arriba y sombra abajo.
+
+     Así que ahora son tronco y copa, y la copa va a seis o siete metros. Dos
+     mallas instanciadas y ni un polígono más de lo necesario: la copa es un
+     icosaedro de dos subdivisiones, que a la distancia a la que se ve es
+     indistinguible de una esfera y cuesta la cuarta parte.
+
+     Y se plantan EN GRUPOS, no de uno en uno repartidos por igual. Un reparto
+     uniforme se lee como papel pintado; la vegetación de borde de carretera
+     crece en rodales, con claros entre medias, y ese ritmo irregular es justo
+     lo que hace que el terreno parezca terreno. */
+  const geoTronco = new THREE.CylinderGeometry(0.22, 0.34, 3.4, 5);
+  const geoCopa = new THREE.IcosahedronGeometry(2.6, 1);
+  const matTronco = new THREE.MeshStandardMaterial({ color: 0x4a3b2c, roughness: 0.95 });
+  const matCopa = new THREE.MeshStandardMaterial({ color: 0x3f5733, roughness: 0.92, flatShading: true });
+  const matCopaSeca = new THREE.MeshStandardMaterial({ color: 0x55613a, roughness: 0.93, flatShading: true });
+  aDesechar.push(geoTronco, geoCopa, matTronco, matCopa, matCopaSeca);
+
+  const ARBOLES = cuantos * 3;
+  const troncos = new THREE.InstancedMesh(geoTronco, matTronco, ARBOLES);
+  const copas = new THREE.InstancedMesh(geoCopa, matCopa, ARBOLES);
+  const copasSecas = new THREE.InstancedMesh(geoCopa, matCopaSeca, ARBOLES);
+  let nCopa = 0;
+  let nSeca = 0;
+  let plantados = 0;
+  /* El arbolado se planta en el campo, NO dentro del recinto del centro
+     logístico: su explanada mide 300 × 300 y llega hasta aquí, y los rodales
+     caían encima. Árboles creciendo sobre el hormigón de una plataforma
+     logística: se ve a la primera y es de las cosas que hacen que una escena
+     deje de creerse. */
+  const bordeRecinto = MEDIDAS.centro + 165;
+  while (plantados < ARBOLES) {
+    // Un rodal: centro al azar y entre tres y nueve árboles alrededor
+    const zR = Math.max(desde - azar() * largo, bordeRecinto);
+    const sR = azar() > 0.5 ? 1 : -1;
+    const xR = X + sR * (16 + azar() * 46);
+    const cuantosR = 3 + Math.floor(azar() * 7);
+    for (let k = 0; k < cuantosR && plantados < ARBOLES; k++, plantados++) {
+      const x = xR + (azar() - 0.5) * 26;
+      const z = zR + (azar() - 0.5) * 34;
+      const alto = 0.75 + azar() * 0.75;          // de 4 a 8 m de copa
+      const suelo = -1.15;
+      dummy.rotation.set(0, azar() * 3.1, 0);
+      dummy.scale.set(1, alto, 1);
+      dummy.position.set(x, suelo + 1.7 * alto, z);
+      dummy.updateMatrix();
+      troncos.setMatrixAt(plantados, dummy.matrix);
+      // La copa: ancho y alto propios, que dos árboles iguales cantan
+      const ancho = 0.72 + azar() * 0.62;
+      dummy.rotation.set(azar() * 0.4, azar() * 3.1, azar() * 0.4);
+      dummy.scale.set(ancho, ancho * (0.78 + azar() * 0.5), ancho);
+      dummy.position.set(x, suelo + 3.4 * alto + 1.3 * ancho, z);
+      dummy.updateMatrix();
+      if (azar() > 0.72) copasSecas.setMatrixAt(nSeca++, dummy.matrix);
+      else copas.setMatrixAt(nCopa++, dummy.matrix);
+    }
+  }
+  copas.count = nCopa;
+  copasSecas.count = nSeca;
+  for (const m of [troncos, copas, copasSecas]) {
+    m.castShadow = true;
+    m.frustumCulled = false;
+    grupo.add(m);
+  }
+
+  /* Y por debajo, matorral bajo: lo que cubre el suelo entre los árboles y
+     evita que el terreno quede pelado entre rodal y rodal. */
   const geoMata = new THREE.SphereGeometry(1.5, 6, 4);
   aDesechar.push(geoMata);
-  const matas = new THREE.InstancedMesh(geoMata, matVerde, cuantos * 3);
-  for (let i = 0; i < cuantos * 3; i++) {
-    const z = desde - azar() * largo;
+  const matas = new THREE.InstancedMesh(geoMata, matVerde, cuantos * 2);
+  for (let i = 0; i < cuantos * 2; i++) {
+    const z = Math.max(desde - azar() * largo, bordeRecinto);
     const s = azar() > 0.5 ? 1 : -1;
     dummy.rotation.set(0, azar() * 3, 0);
-    dummy.position.set(X + s * (11 + azar() * 30), -0.3 + azar() * 0.9, z);
-    dummy.scale.set(0.6 + azar() * 1.6, 0.5 + azar(), 0.6 + azar() * 1.6);
+    dummy.position.set(X + s * (11 + azar() * 54), -0.9 + azar() * 0.5, z);
+    dummy.scale.set(0.5 + azar() * 1.2, 0.4 + azar() * 0.7, 0.5 + azar() * 1.2);
     dummy.updateMatrix();
     matas.setMatrixAt(i, dummy.matrix);
   }
@@ -819,7 +897,11 @@ export function crearCentro({ caps }) {
     normalMap: aceroPintado('#c2c8ce', { semilla: 44 }).normalMap,
     normalScale: new THREE.Vector2(0.45, 0.45),
   });
-  const matSuelo = hormigon(0x5a5e64, 26);
+  /* Hormigón, no pizarra. El 0x5a5e64 que había es un gris AZULADO, y una
+     explanada de trescientos metros de ese color, vista desde la carretera,
+     se lee como una losa de piedra caída en medio del campo en vez de como el
+     pavimento de un recinto. El hormigón de verdad tira a cálido. */
+  const matSuelo = hormigon(0x6d6a63, 26);
   const matOscuro = aceroPintado('#242a31', { semilla: 45, rugosidad: 0.6, metal: 0.5 });
   const matNaranja = aceroPintado('#c85a1e', { semilla: 46, rugosidad: 0.58, metal: 0.25 });
   const matGomaTope = new THREE.MeshStandardMaterial({ color: 0x17181b, roughness: 0.95 });
@@ -1182,7 +1264,7 @@ export function crearDestino() {
     normalMap: aceroPintado('#cdd3d8', { semilla: 61 }).normalMap,
     normalScale: new THREE.Vector2(0.4, 0.4),
   });
-  const matSuelo = hormigon(0x5d6167, 18);
+  const matSuelo = hormigon(0x6f6c65, 18);
   const matNaranja = aceroPintado('#c85a1e', { semilla: 62, rugosidad: 0.58, metal: 0.25 });
   const matOscuro = aceroPintado('#232930', { semilla: 63, rugosidad: 0.6, metal: 0.5 });
   const matMarca = pintura(0xe6e9ea);

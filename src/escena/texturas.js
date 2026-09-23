@@ -101,11 +101,36 @@ export function texturaHormigon() {
       ctx.fillStyle = v > 0.5 ? `rgba(255,255,255,${azar() * 0.12})` : `rgba(0,0,0,${azar() * 0.16})`;
       ctx.fillRect(azar() * w, azar() * h, azar() * 3 + 1, azar() * 3 + 1);
     }
-    ctx.strokeStyle = 'rgba(0,0,0,.3)';
-    ctx.lineWidth = Math.max(1, w * 0.004);
-    for (let i = 0; i <= 4; i++) {
-      ctx.beginPath(); ctx.moveTo((w / 4) * i, 0); ctx.lineTo((w / 4) * i, h); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, (h / 4) * i); ctx.lineTo(w, (h / 4) * i); ctx.stroke();
+    /* Las juntas de la losa.
+       Eran cuatro por tesela al 30 % de negro, y la tesela se repite 26 veces
+       a lo ancho de la explanada: ciento cuatro líneas negras a intervalos
+       exactos en cada dirección. Desde el aire eso no es un pavimento, es
+       PAPEL CUADRICULADO, y era lo que más delataba el puerto entero.
+       Una losa de muelle mide unos seis metros y su junta es un hueco de dos
+       centímetros: a cien metros de altura se adivina, no se ve. Así que dos
+       juntas por tesela y al 12 %, que es la diferencia entre insinuar la
+       retícula y dibujarla. */
+    ctx.strokeStyle = 'rgba(0,0,0,.12)';
+    ctx.lineWidth = Math.max(1, w * 0.003);
+    for (let i = 0; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo((w / 2) * i, 0); ctx.lineTo((w / 2) * i, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, (h / 2) * i); ctx.lineTo(w, (h / 2) * i); ctx.stroke();
+    }
+    /* Y rodales grandes de desgaste. Sin ellos el pavimento es un color
+       uniforme con una retícula encima, y un color uniforme no tiene escala:
+       es lo que hace que una explanada parezca una hoja en blanco. */
+    for (let i = 0; i < 11; i++) {
+      const cx = azar() * w;
+      const cy = azar() * h;
+      const r = w * (0.18 + azar() * 0.3);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      const claro = azar() > 0.5;
+      g.addColorStop(0, claro ? 'rgba(255,255,255,.07)' : 'rgba(60,58,54,.09)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r, r * (0.5 + azar()), azar() * 3, 0, 7);
+      ctx.fill();
     }
     /* Manchas de aceite y rodadura. Van POCAS y SUAVES.
        Eran treinta al 18 % y, con la tesela repitiéndose cien veces a lo ancho
@@ -123,6 +148,48 @@ export function texturaHormigon() {
       ctx.fillRect(0, 0, w, h);
     }
   }), 26, 26);
+}
+
+/**
+ * CAMPO: la tierra de los lados de la carretera y de los recintos.
+ *
+ * Era un color plano. Un color plano a cielo abierto no se lee como terreno,
+ * se lee como papel: no tiene nada que le dé escala y, en cuanto la cámara se
+ * levanta, delata que el suelo es un plano. Lo que hace que un campo parezca
+ * campo desde el aire no es el detalle fino —a esa distancia no se ve— sino
+ * las MANCHAS GRANDES: rodales de hierba más seca, más verde, calvas de
+ * tierra. Eso es lo que hay aquí, en tres escalas, y por eso la tesela se
+ * repite poco: lo que se busca es variedad de mancha, no de grano.
+ */
+export function texturaCampo(base = '#5c5742', semilla = 17) {
+  return repetir(lienzo(LADO, LADO, (ctx, w, h) => {
+    const azar = azarCon(semilla);
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, w, h);
+    // Rodales: pocos y muy grandes, que son los que dan escala desde el aire
+    const tintes = ['#6b6a45', '#4e5738', '#6e6449', '#586043', '#4a4a37'];
+    for (let capa = 0; capa < 3; capa++) {
+      const cuantos = [7, 18, 46][capa];
+      const radio = [0.42, 0.2, 0.08][capa];
+      const alfa = [0.34, 0.3, 0.26][capa];
+      for (let i = 0; i < cuantos; i++) {
+        const cx = azar() * w;
+        const cy = azar() * h;
+        const r = w * radio * (0.45 + azar());
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        const c = tintes[Math.floor(azar() * tintes.length)];
+        g.addColorStop(0, c);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = alfa * (0.6 + azar() * 0.7);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, r, r * (0.5 + azar()), azar() * 3, 0, 7);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    desgaste(ctx, w, h, azar, 0.7);
+  }), 9, 9);
 }
 
 /** Asfalto con su línea discontinua ya pintada en el sitio exacto. */
