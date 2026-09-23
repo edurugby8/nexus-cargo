@@ -116,24 +116,80 @@ export function crearBarco({ caps }) {
   grupo.add(cubierta);
   aDesechar.push(geoCub);
 
-  // Castillo de popa: puente, acomodación y chimenea
+  /* ── Castillo de popa ────────────────────────────────────────────
+     Era una caja blanca de 24 × 26 con una caja oscura encima y un cilindro al
+     lado. A doscientos metros eso no es una superestructura: es un bloque, y
+     era lo que hacía que el buque —la pieza más grande de toda la página— se
+     leyera como una maqueta.
+
+     Lo que identifica un castillo de acomodación no es el detalle fino: son
+     las BANDAS HORIZONTALES. Siete u ocho cubiertas, cada una con su corrida
+     de ventanas, y esa repetición regular es la que da la escala del buque
+     entero, porque el ojo cuenta pisos y deduce los treinta metros. Van
+     instanciadas: ocho bandas, un solo dibujado. */
   const popaX = -E * 0.34;
-  const geoAcom = new THREE.BoxGeometry(24, 26, M * 0.62);
+  const ANCHO_ACOM = 24;
+  const FONDO_ACOM = M * 0.62;
+  const geoAcom = new THREE.BoxGeometry(ANCHO_ACOM, 26, FONDO_ACOM);
   const acom = new THREE.Mesh(geoAcom, matBlanco);
   acom.position.set(popaX, F + 13, 0);
   acom.castShadow = true;
   grupo.add(acom);
+
+  const CUBIERTAS = 7;
+  const geoBanda = new THREE.BoxGeometry(ANCHO_ACOM * 0.82, 1.15, FONDO_ACOM + 0.24);
+  const bandas = new THREE.InstancedMesh(geoBanda, matOscuro, CUBIERTAS);
+  const dummyB = new THREE.Object3D();
+  for (let i = 0; i < CUBIERTAS; i++) {
+    dummyB.position.set(popaX, F + 4.5 + i * 3.2, 0);
+    dummyB.updateMatrix();
+    bandas.setMatrixAt(i, dummyB.matrix);
+  }
+  bandas.frustumCulled = false;
+  grupo.add(bandas);
+  aDesechar.push(geoBanda);
+
+  /* El puente, con sus ALERONES. Sobresale por las dos bandas más que la
+     acomodación —de ahí se gobierna la maniobra de atraque, mirando el
+     costado— y ese vuelo es la silueta que distingue un puente de un piso
+     más. */
   const geoPuente = new THREE.BoxGeometry(20, 4.2, M * 0.84);
-  const puente = new THREE.Mesh(geoPuente, matOscuro);
+  const puente = new THREE.Mesh(geoPuente, matBlanco);
   puente.position.set(popaX, F + 27.5, 0);
   puente.castShadow = true;
   grupo.add(puente);
+  // La corrida de ventanas del puente, que es lo que se mira desde fuera
+  const geoVentanal = new THREE.BoxGeometry(20.3, 2.1, M * 0.845);
+  const ventanal = new THREE.Mesh(geoVentanal, matOscuro);
+  ventanal.position.set(popaX, F + 28.2, 0);
+  grupo.add(ventanal);
+  // Y el techo del puente, más estrecho: un remate, no otro piso
+  const geoTecho = new THREE.BoxGeometry(14, 2.6, M * 0.5);
+  const techo = new THREE.Mesh(geoTecho, matBlanco);
+  techo.position.set(popaX, F + 31, 0);
+  techo.castShadow = true;
+  grupo.add(techo);
+
+  /* La chimenea: guardacalor y tubo, no un tubo suelto.
+     Una chimenea de buque no sale de la cubierta: sale de un guardacalor, un
+     cajón que sube desde la máquina. Sin él, el cilindro flotaba al lado del
+     castillo. */
+  const geoGuarda = new THREE.BoxGeometry(11, 12, M * 0.34);
+  const guarda = new THREE.Mesh(geoGuarda, matBlanco);
+  guarda.position.set(popaX - 15, F + 6, 0);
+  guarda.castShadow = true;
+  grupo.add(guarda);
   const geoChim = new THREE.CylinderGeometry(3.4, 4.2, 15, 10);
   const chim = new THREE.Mesh(geoChim, matOscuro);
-  chim.position.set(popaX - 16, F + 20, 0);
+  chim.position.set(popaX - 15, F + 19, 0);
   chim.castShadow = true;
   grupo.add(chim);
-  aDesechar.push(geoAcom, geoPuente, geoChim);
+  // La banda de color de la naviera, que es lo que se ve desde lejos
+  const geoBandaChim = new THREE.CylinderGeometry(3.7, 4.1, 4.4, 10);
+  const bandaChim = new THREE.Mesh(geoBandaChim, matObraViva);
+  bandaChim.position.set(popaX - 15, F + 20.5, 0);
+  grupo.add(bandaChim);
+  aDesechar.push(geoAcom, geoPuente, geoVentanal, geoTecho, geoGuarda, geoChim, geoBandaChim);
 
   /* Carga de cubierta: bahías de contenedores instanciados.
      Nueve mil cuatrocientos TEU no se pueden dibujar, pero tampoco hace falta:

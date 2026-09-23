@@ -116,16 +116,23 @@ export function texturaHormigon() {
       ctx.beginPath(); ctx.moveTo((w / 2) * i, 0); ctx.lineTo((w / 2) * i, h); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(0, (h / 2) * i); ctx.lineTo(w, (h / 2) * i); ctx.stroke();
     }
-    /* Y rodales grandes de desgaste. Sin ellos el pavimento es un color
-       uniforme con una retícula encima, y un color uniforme no tiene escala:
-       es lo que hace que una explanada parezca una hoja en blanco. */
+    /* Rodales de desgaste, MUY suaves.
+       Los puse al 7 y al 9 % de opacidad para dar escala al pavimento, y el
+       resultado fue peor que el problema: esta tesela se repite 26 veces sobre
+       una explanada de 3.400 metros, así que cada mancha reaparece cada ciento
+       treinta metros en las dos direcciones. Desde el aire eso es un LUNARADO
+       regular, que canta más que el color liso que venía a arreglar. Es
+       exactamente lo que ya avisaba el comentario de las manchas de aceite,
+       tres líneas más abajo, y aun así caí.
+       Al 2,5 % siguen quitando la sensación de papel liso y su repetición no
+       llega a leerse. Lo que se repite mucho tiene que ser casi nada. */
     for (let i = 0; i < 11; i++) {
       const cx = azar() * w;
       const cy = azar() * h;
       const r = w * (0.18 + azar() * 0.3);
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
       const claro = azar() > 0.5;
-      g.addColorStop(0, claro ? 'rgba(255,255,255,.07)' : 'rgba(60,58,54,.09)');
+      g.addColorStop(0, claro ? 'rgba(255,255,255,.025)' : 'rgba(60,58,54,.03)');
       g.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = g;
       ctx.beginPath();

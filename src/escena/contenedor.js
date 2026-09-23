@@ -362,10 +362,28 @@ export function crearContenedor({ protagonista = false, color = '#c85a1e', semil
 export function crearPilas({ bloques, semilla = 1 }) {
   const grupo = new THREE.Group();
   const aDesechar = [];
-  const COLORES = ['#2e5d86', '#7d2f2a', '#3f6b4a', '#8a6a24', '#4a4f57', '#6b3a5e'];
-  const geo = new THREE.BoxGeometry(L, H, A);
+  /* La paleta, bajada de tono. Eran seis colores saturados y todos a la misma
+     intensidad: un patio así se lee como un montón de piezas de plástico. Un
+     contenedor lleva años a la intemperie y su pintura está apagada, con unos
+     cuantos más vivos entre medias —los recién pintados—, y ése es el contraste
+     que hay que dar: no seis colores fuertes, sino muchos apagados y algunos
+     que destacan. */
+  const COLORES = [
+    '#3c5a73', '#6e3a33', '#465f47', '#7a6a3c', '#4a4f57', '#5d4655',
+    '#2e5d86', '#8a6a24',
+  ];
   const dummy = new THREE.Object3D();
-  aDesechar.push(geo);
+
+  /* DOS TAMAÑOS, y es la diferencia entre un patio y una estantería.
+     Todas las cajas medían cuarenta pies. Un patio de verdad mezcla veinte y
+     cuarenta, y esa mezcla es lo que rompe la retícula perfecta: aparecen
+     medias plazas, huecos de seis metros, filas que no cuadran. Con un solo
+     tamaño, todo cuadra siempre, y eso no pasa en ningún puerto del mundo.
+     Cuesta una geometría más —la misma malla instanciada por color y por
+     tamaño— y son mallas, no dibujados por caja. */
+  const geo = new THREE.BoxGeometry(L, H, A);
+  const geoCorto = new THREE.BoxGeometry(L / 2 - 0.09, H, A);
+  aDesechar.push(geo, geoCorto);
 
   /* Ruido determinista. El mismo patio en cada visita: un patio que cambia al
      recargar delata que es un decorado. */
@@ -389,13 +407,24 @@ export function crearPilas({ bloques, semilla = 1 }) {
         const borde = (c === 0 || c === b.cols - 1) ? 1 : 0;
         let alto = Math.max(1, Math.round(b.alto - borde - r * 1.6));
         if (r > 0.93) alto = 0;                 // un hueco de vez en cuando
+        /* Una de cada cinco plazas va con dos de veinte pies en vez de una de
+           cuarenta, y cada mitad con su color: es lo que pone el ritmo roto. */
+        const corta = azar(bi * 977 + c * 37 + f * 101) > 0.8;
+        const x0 = b.x + (c - (b.cols - 1) / 2) * (L + 0.6);
+        const z0 = b.z + (f - (b.filas - 1) / 2) * (A + 0.12);
         for (let piso = 0; piso < alto; piso++) {
-          puestos.push({
-            x: b.x + (c - (b.cols - 1) / 2) * (L + 0.6),
-            y: (b.y || 0) + H / 2 + piso * (H + 0.04),
-            z: b.z + (f - (b.filas - 1) / 2) * (A + 0.12),
-            color: Math.floor(azar(bi * 331 + c * 71 + f * 13 + piso * 3) * COLORES.length),
-          });
+          const y = (b.y || 0) + H / 2 + piso * (H + 0.04);
+          const sem = bi * 331 + c * 71 + f * 13 + piso * 3;
+          if (corta) {
+            for (const lado of [-1, 1]) {
+              puestos.push({
+                x: x0 + lado * (L / 4 + 0.05), y, z: z0, corto: true,
+                color: Math.floor(azar(sem + (lado > 0 ? 7 : 0)) * COLORES.length),
+              });
+            }
+          } else {
+            puestos.push({ x: x0, y, z: z0, corto: false, color: Math.floor(azar(sem) * COLORES.length) });
+          }
         }
       }
     }
@@ -404,6 +433,10 @@ export function crearPilas({ bloques, semilla = 1 }) {
   COLORES.forEach((color, ci) => {
     const mios = puestos.filter((p) => p.color === ci);
     if (!mios.length) return;
+    /* La textura y el material se hacen UNA vez por color y los comparten los
+       dos tamaños. Generarlos dentro del bucle de tamaños los duplicaba: la
+       misma imagen dos veces en memoria de vídeo por cada color, dieciséis en
+       vez de ocho, y sin que se viera ninguna diferencia. */
     const mapa = texturaContenedorGenerico(color, semilla + ci);
     const mat = new THREE.MeshStandardMaterial({
       map: mapa, roughness: 0.78, metalness: 0.2,
@@ -411,19 +444,23 @@ export function crearPilas({ bloques, semilla = 1 }) {
       normalScale: new THREE.Vector2(0.4, 0.4),
     });
     aDesechar.push(mapa, mat);
-    const malla = new THREE.InstancedMesh(geo, mat, mios.length);
-    malla.castShadow = true;
-    malla.receiveShadow = true;
-    mios.forEach((p, n) => {
-      dummy.position.set(p.x, p.y, p.z);
-      dummy.rotation.set(0, 0, 0);
-      dummy.scale.setScalar(1);
-      dummy.updateMatrix();
-      malla.setMatrixAt(n, dummy.matrix);
-    });
-    malla.instanceMatrix.needsUpdate = true;
-    malla.frustumCulled = false;
-    grupo.add(malla);
+    for (const corto of [false, true]) {
+      const suyos = mios.filter((p) => p.corto === corto);
+      if (!suyos.length) continue;
+      const malla = new THREE.InstancedMesh(corto ? geoCorto : geo, mat, suyos.length);
+      malla.castShadow = true;
+      malla.receiveShadow = true;
+      suyos.forEach((p, n) => {
+        dummy.position.set(p.x, p.y, p.z);
+        dummy.rotation.set(0, 0, 0);
+        dummy.scale.setScalar(1);
+        dummy.updateMatrix();
+        malla.setMatrixAt(n, dummy.matrix);
+      });
+      malla.instanceMatrix.needsUpdate = true;
+      malla.frustumCulled = false;
+      grupo.add(malla);
+    }
   });
 
   grupo.userData.liberar = () => aDesechar.forEach((o) => o.dispose?.());

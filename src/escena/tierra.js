@@ -63,8 +63,12 @@ export function crearPuerto({ caps }) {
   grupo.add(suelo);
   aDesechar.push(geoSuelo);
 
-  // El cantil: el canto vertical contra el agua, con sus defensas
-  const geoCantil = new THREE.BoxGeometry(1400, 6, 3);
+  /* El cantil: el canto vertical contra el agua, con sus defensas.
+     Medía 1.400 y la explanada mide 3.400, así que por fuera de esos 1.400 el
+     muelle se acababa en un plano sin canto y, desde un plano bajo sobre el
+     mar, se veía la explanada FLOTANDO sobre el agua con el filo a la vista.
+     El canto tiene que llegar hasta donde llegue el muelle. */
+  const geoCantil = new THREE.BoxGeometry(3400, 6, 3);
   const cantil = new THREE.Mesh(geoCantil, matBorde);
   cantil.position.set(0, -2.4, MEDIDAS.muelle);
   cantil.receiveShadow = true;
@@ -967,6 +971,72 @@ export function crearCentro({ caps }) {
   tejado.castShadow = true;
   grupo.add(tejado);
   aDesechar.push(geoCubierta);
+
+  /* ── La cubierta, que es lo que de verdad se ve ────────────────────
+     La cámara de esta página es aérea: de una nave logística se ve el TEJADO
+     casi todo el rato, y el tejado era un faldón liso de noventa y seis por
+     setenta y dos metros. Siete mil metros cuadrados de nada.
+
+     Una cubierta industrial se reconoce por tres cosas, y las tres cuestan una
+     malla instanciada cada una: las bandas de LUCERNARIOS que corren de
+     alero a caballete —son la iluminación natural de la nave y forman rayas
+     regulares—, los EXTRACTORES alineados en el caballete, y las máquinas de
+     clima repartidas. Con eso el tejado deja de ser una superficie y pasa a
+     tener escala: se cuentan las bandas y se deduce cuánto mide la nave. */
+  const dummyT = new THREE.Object3D();
+  const matLucernario = luminoso(0xd8e6ef, 0.16);
+  const matMaquina = new THREE.MeshStandardMaterial({ color: 0x9aa1a8, roughness: 0.72, metalness: 0.35 });
+  aDesechar.push(matLucernario, matMaquina);
+
+  const BANDAS = 9;
+  const geoLucernario = new THREE.BoxGeometry(3.4, 0.35, FONDO * 0.4);
+  const lucernarios = new THREE.InstancedMesh(geoLucernario, matLucernario, BANDAS * 2);
+  let nL = 0;
+  for (let i = 0; i < BANDAS; i++) {
+    const x = xNave - ANCHO / 2 + ANCHO * ((i + 0.5) / BANDAS);
+    for (const lado of [-1, 1]) {
+      // Sobre el faldón, que cae un 5 %: la banda se inclina con él
+      const dz = lado * FONDO * 0.25;
+      dummyT.rotation.set(lado * 0.088, 0, 0);
+      dummyT.position.set(x, ALTO + 1.7 - Math.abs(dz) * 0.089, zFachada - FONDO / 2 + dz);
+      dummyT.updateMatrix();
+      lucernarios.setMatrixAt(nL++, dummyT.matrix);
+    }
+  }
+  lucernarios.frustumCulled = false;
+  grupo.add(lucernarios);
+  aDesechar.push(geoLucernario);
+
+  const geoExtractor = new THREE.CylinderGeometry(0.62, 0.62, 0.9, 8);
+  const extractores = new THREE.InstancedMesh(geoExtractor, matMaquina, BANDAS + 1);
+  for (let i = 0; i <= BANDAS; i++) {
+    dummyT.rotation.set(0, 0, 0);
+    dummyT.position.set(xNave - ANCHO / 2 + (ANCHO * i) / BANDAS, ALTO + 3.6, zFachada - FONDO / 2);
+    dummyT.updateMatrix();
+    extractores.setMatrixAt(i, dummyT.matrix);
+  }
+  extractores.castShadow = true;
+  extractores.frustumCulled = false;
+  grupo.add(extractores);
+  aDesechar.push(geoExtractor);
+
+  const geoClima = new THREE.BoxGeometry(3.2, 1.3, 2.4);
+  const climas = new THREE.InstancedMesh(geoClima, matMaquina, 6);
+  const azarT = azarCon(4407);
+  for (let i = 0; i < 6; i++) {
+    dummyT.rotation.set(0, 0, 0);
+    dummyT.position.set(
+      xNave - ANCHO * 0.38 + azarT() * ANCHO * 0.76,
+      ALTO + 1.4,
+      zFachada - FONDO / 2 + (azarT() - 0.5) * FONDO * 0.5,
+    );
+    dummyT.updateMatrix();
+    climas.setMatrixAt(i, dummyT.matrix);
+  }
+  climas.castShadow = true;
+  climas.frustumCulled = false;
+  grupo.add(climas);
+  aDesechar.push(geoClima);
 
   // Franja de acento bajo el alero, y el rótulo de la marca
   const geoFranja = new THREE.BoxGeometry(ANCHO + 0.4, 1.5, FONDO + 0.4);
