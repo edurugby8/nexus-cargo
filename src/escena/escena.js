@@ -68,13 +68,26 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
   escena.add(sol.target);
   if (caps.sombras) {
     sol.castShadow = true;
-    sol.shadow.mapSize.set(2048, 2048);
+    /* LA SOMBRA DE CONTACTO, que es lo que hace que las cosas parezcan
+       APOYADAS y no pegadas encima.
+       `normalBias` estaba en 0,6: sesenta centímetros. Ese parámetro desplaza
+       el punto que se consulta en el mapa de sombras a lo largo de la normal
+       para evitar el moaré, y a partir de cierto valor produce el efecto
+       contrario y peor: la sombra SE DESPEGA de quien la proyecta. Medio metro
+       de despegue en la base de un contenedor, de un árbol o de una nave es
+       exactamente la diferencia entre un objeto posado en el suelo y un
+       objeto flotando sobre una mancha oscura, y era lo que daba a toda la
+       página ese aire de maqueta de cartón.
+       Con el mapa a 3.072 sobre una ventana de 180 metros, un texel mide seis
+       centímetros; doce centímetros de sesgo son dos texels, que es lo que
+       hace falta y ni uno más. */
+    sol.shadow.mapSize.set(caps.nivel === 'alto' ? 3072 : 2048, caps.nivel === 'alto' ? 3072 : 2048);
     const c = sol.shadow.camera;
     c.left = -90; c.right = 90; c.top = 90; c.bottom = -90;
     c.near = 1; c.far = 520;
     c.updateProjectionMatrix();
-    sol.shadow.bias = -0.0009;
-    sol.shadow.normalBias = 0.6;
+    sol.shadow.bias = -0.00022;
+    sol.shadow.normalBias = 0.12;
   }
   escena.add(sol);
 

@@ -27,6 +27,7 @@
  */
 
 import * as THREE from 'three';
+import { texturaHormigonNeutro } from './texturas.js';
 
 /* ── Utilidades de lienzo ─────────────────────────────────────────── */
 
@@ -259,9 +260,17 @@ export function hormigon(color = 0x9a9891, repeticion = 8) {
   r.repeat.set(repeticion, repeticion);
   r.needsUpdate = true;
   desechables.push(r);
+  /* Y un mapa de color casi blanco. Sin él, este material era color plano con
+     relieve, y el relieve a cien metros no existe: la luz que lo revelaría es
+     rasante y no llega. Lo que da escala a un pavimento visto desde el aire es
+     la MANCHA, no el grano. Al ir casi en blanco, multiplica sin desteñir. */
+  const c = cacheado('c:hormigon', () => texturaHormigonNeutro()).clone();
+  c.repeat.set(repeticion, repeticion);
+  c.needsUpdate = true;
+  desechables.push(c);
   return registrar(clave, new THREE.MeshStandardMaterial({
     color: new THREE.Color(color), roughness: 0.94, metalness: 0.02,
-    normalMap: n, normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: r,
+    map: c, normalMap: n, normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: r,
   }));
 }
 

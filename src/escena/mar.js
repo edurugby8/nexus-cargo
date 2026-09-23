@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { texturaMar, texturaCielo } from './texturas.js';
+import { texturaMar, texturaNubes } from './texturas.js';
 import { MEDIDAS } from './ruta.js';
 
 /* OJO con los acentos graves dentro de estos literales: uno solo, aunque esté
@@ -124,9 +124,15 @@ const FRAGMENTO = /* glsl */ `
     /* El color del agua tampoco es uno. Un mar de verdad tiene rodales: más
        oscuro donde el viento riza y más claro donde está plano. Con un solo
        color, la superficie no tiene escala y lo que se ve es una lámina. */
-    float rodal = texture2D(uDetalle, vUv * 3.0 + vec2(uTiempo * 0.0016, 0.0)).g;
+    /* Rodales MUY suaves. A escala 3 y con un 30 % de rango, lo que se veía no
+       eran rodales de viento sino el GRANO de la propia textura: manchas
+       oscuras de veinte metros repartidas por la dársena, como si el agua
+       tuviera sombras flotando. Un mar en calma varía, pero poco y en grande:
+       a escala 1,2 las manchas miden cincuenta metros y con un 14 % de rango
+       se notan sin que se puedan contar. */
+    float rodal = texture2D(uDetalle, vUv * 1.2 + vec2(uTiempo * 0.0011, 0.0)).g;
     vec3 agua = mix(uHondo, uSomero, max(dot(N, vec3(0.0, 1.0, 0.0)), 0.0));
-    agua *= 0.86 + rodal * 0.30;
+    agua *= 0.93 + rodal * 0.14;
     vec3 color = mix(agua, uCielo, fres);
 
     // Reflejo especular del sol sobre el agua: el destello es lo que hace que
@@ -234,7 +240,7 @@ export function crearMar({ caps }) {
  */
 export function crearCielo(radio = 1800) {
   const geo = new THREE.SphereGeometry(radio, 24, 16);
-  const mapa = texturaCielo();
+  const nubes = texturaNubes();
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
@@ -243,6 +249,9 @@ export function crearCielo(radio = 1800) {
       uHorizonte: { value: new THREE.Color(0xb9a48c) },
       uSol: { value: new THREE.Color(0xffd7a0) },
       uDirSol: { value: new THREE.Vector3(0.4, 0.4, 0.6) },
+      uNubes: { value: nubes },
+      uTiempo: { value: 0 },
+      uNubosidad: { value: 0.85 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vDir;
@@ -256,6 +265,9 @@ export function crearCielo(radio = 1800) {
       uniform vec3 uHorizonte;
       uniform vec3 uSol;
       uniform vec3 uDirSol;
+      uniform sampler2D uNubes;
+      uniform float uTiempo;
+      uniform float uNubosidad;
       varying vec3 vDir;
       void main() {
         float h = clamp(vDir.y * 1.25 + 0.06, -1.0, 1.0);
@@ -269,6 +281,32 @@ export function crearCielo(radio = 1800) {
         color = mix(color * 0.72, color, smoothstep(-0.12, 0.02, h));
         // El sol y su halo
         float d = max(dot(normalize(vDir), normalize(uDirSol)), 0.0);
+
+        /* NUBES, proyectadas sobre un plano.
+           La máscara no se envuelve sobre la esfera: se proyecta como si
+           hubiera una capa de nubes plana a cierta altura, dividiendo la
+           dirección por su componente vertical. Eso es lo que hace que las
+           nubes se APELMACEN hacia el horizonte y se abran sobre la cabeza,
+           que es la perspectiva real de un cielo cubierto; envueltas sobre la
+           esfera salen todas del mismo tamaño y parecen papel pintado.
+           Dos capas a distinta escala y a distinta deriva: la lenta es la masa
+           y la rápida deshace el borde. */
+        if (h > 0.0) {
+          vec2 uvN = vDir.xz / max(vDir.y, 0.075);
+          float n1 = texture2D(uNubes, uvN * 0.055 + vec2(uTiempo * 0.00035, 0.0)).r;
+          float n2 = texture2D(uNubes, uvN * 0.145 - vec2(uTiempo * 0.00080, uTiempo * 0.00022)).r;
+          float nube = clamp(n1 * 0.85 + n2 * 0.45 - 0.26, 0.0, 1.0);
+          /* Y se desvanecen en la última franja sobre el horizonte: ahí la
+             proyección se estira hasta el infinito y sin esto aparece una
+             banda de rayas radiales. */
+          nube *= smoothstep(0.015, 0.20, vDir.y);
+          /* El color de la nube: su cara iluminada mira al sol, así que va del
+             gris del horizonte al blanco según lo cerca que esté de él. */
+          vec3 claro = mix(uHorizonte, vec3(1.0), 0.45) + uSol * pow(d, 5.0) * 0.55;
+          vec3 oscuro = mix(uHorizonte, uAlto, 0.55) * 0.82;
+          color = mix(color, mix(oscuro, claro, clamp(nube * 1.6, 0.0, 1.0)), nube * uNubosidad);
+        }
+
         // Disco, corona y resplandor. El tercer término iba a la 3.ª potencia
         // y teñía medio cielo: a la 8.ª se queda donde tiene que estar.
         color += uSol * pow(d, 1400.0) * 3.2;
@@ -288,7 +326,8 @@ export function crearCielo(radio = 1800) {
     mat.uniforms.uHorizonte.value.setHex(mundo.ambiente.cieloHorizonte);
     mat.uniforms.uSol.value.setHex(mundo.ambiente.colorLuz);
     mat.uniforms.uDirSol.value.copy(sol);
+    mat.uniforms.uTiempo.value = reloj;
   };
-  malla.userData.liberar = () => { geo.dispose(); mat.dispose(); mapa.dispose(); };
+  malla.userData.liberar = () => { geo.dispose(); mat.dispose(); nubes.dispose(); };
   return malla;
 }

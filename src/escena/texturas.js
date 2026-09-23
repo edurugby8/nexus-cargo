@@ -199,6 +199,56 @@ export function texturaCampo(base = '#5c5742', semilla = 17) {
   }), 9, 9);
 }
 
+/**
+ * HORMIGÓN NEUTRO: variación sin color.
+ *
+ * `hormigon()` daba relieve y rugosidad pero ningún mapa de color, y un mapa
+ * de relieve a cien metros de distancia no hace absolutamente nada: la luz
+ * rasante que lo revelaría no llega, así que el pavimento de los recintos —el
+ * del centro logístico y el del destino, que son los dos últimos capítulos—
+ * quedaba en COLOR PLANO. Un color plano no tiene escala; es una hoja de papel
+ * del tamaño de un campo de fútbol.
+ *
+ * Esta textura va casi en blanco a propósito: multiplica al color del
+ * material, así que aporta la variación sin desteñir el tono que cada
+ * superficie tiene elegido. Juntas de losa muy suaves y rodales amplios, que
+ * es lo que se ve de un pavimento desde arriba.
+ */
+export function texturaHormigonNeutro() {
+  return repetir(lienzo(LADO / 2, LADO / 2, (ctx, w, h) => {
+    const azar = azarCon(5501);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 9; i++) {
+      const cx = azar() * w;
+      const cy = azar() * h;
+      const r = w * (0.2 + azar() * 0.34);
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      const claro = azar() > 0.45;
+      /* Al 30 % los rodales volvían a formar cuadrícula: la tesela se repite
+         veintiséis veces y cada mancha reaparecía en el mismo sitio de cada
+         copia. Es la tercera vez que caigo en lo mismo, así que lo dejo
+         escrito donde se ve: lo que se repite mucho tiene que ser CASI NADA.
+         Al 9 % la superficie deja de ser papel liso y su repetición no se
+         llega a leer. */
+      g.addColorStop(0, claro ? 'rgba(255,255,255,1)' : 'rgba(150,146,140,.09)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, r, r * (0.55 + azar()), azar() * 3, 0, 7);
+      ctx.fill();
+    }
+    // Juntas: dos por tesela y apenas marcadas, como en la explanada del muelle
+    ctx.strokeStyle = 'rgba(120,117,112,.16)';
+    ctx.lineWidth = Math.max(1, w * 0.004);
+    for (let i = 0; i <= 2; i++) {
+      ctx.beginPath(); ctx.moveTo((w / 2) * i, 0); ctx.lineTo((w / 2) * i, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, (h / 2) * i); ctx.lineTo(w, (h / 2) * i); ctx.stroke();
+    }
+    desgaste(ctx, w, h, azar, 0.5);
+  }), 1, 1);
+}
+
 /** Asfalto con su línea discontinua ya pintada en el sitio exacto. */
 export function texturaAsfalto() {
   return repetir(lienzo(LADO / 2, LADO * 2, (ctx, w, h) => {
@@ -359,4 +409,60 @@ export function texturaCielo() {
   });
   t.colorSpace = THREE.NoColorSpace;
   return t;
+}
+
+/**
+ * NUBES.
+ *
+ * Un cielo de dos colores y un sol es un fondo de estudio: no tiene nada que
+ * dé profundidad ni hora. Y ocupa media pantalla en casi todos los planos,
+ * así que es lo que más se ve de toda la página después del suelo.
+ *
+ * Esto es una máscara de cobertura, en blanco y negro, que el domo proyecta
+ * sobre un plano de nubes: manchas suaves en tres tamaños, las grandes para la
+ * masa y las pequeñas para el borde deshilachado. Se dibuja TILEABLE —cada
+ * mancha se repite en los cuatro bordes— porque sobre el domo se repite muchas
+ * veces y una costura en el cielo se ve desde cualquier parte.
+ */
+export function texturaNubes(semilla = 91) {
+  return repetir(lienzo(LADO, LADO, (ctx, w, h) => {
+    const azar = azarCon(semilla);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    const mancha = (cx, cy, r, a) => {
+      // Las cuatro copias de borde: así la tesela casa consigo misma
+      for (const dx of [-w, 0, w]) {
+        for (const dy of [-h, 0, h]) {
+          const g = ctx.createRadialGradient(cx + dx, cy + dy, 0, cx + dx, cy + dy, r);
+          g.addColorStop(0, `rgba(255,255,255,${a})`);
+          g.addColorStop(0.55, `rgba(255,255,255,${a * 0.45})`);
+          g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(cx + dx - r, cy + dy - r, r * 2, r * 2);
+        }
+      }
+    };
+    /* Cúmulos: pocos y grandes, y cada uno hecho de varios lóbulos alrededor
+       de un centro. Una nube no es un círculo; es un racimo. */
+    for (let i = 0; i < 16; i++) {
+      const cx = azar() * w;
+      const cy = azar() * h;
+      const R = w * (0.05 + azar() * 0.09);
+      const lobulos = 4 + Math.floor(azar() * 5);
+      for (let k = 0; k < lobulos; k++) {
+        mancha(
+          cx + (azar() - 0.5) * R * 2.4,
+          cy + (azar() - 0.5) * R * 1.2,
+          R * (0.45 + azar() * 0.7),
+          0.30 + azar() * 0.22,
+        );
+      }
+    }
+    // Jirones: muchos, pequeños y tenues, que son los que rompen el borde
+    for (let i = 0; i < 90; i++) {
+      mancha(azar() * w, azar() * h, w * (0.008 + azar() * 0.03), 0.06 + azar() * 0.12);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }), 1, 1);
 }

@@ -1051,19 +1051,27 @@ export function crearCentro({ caps }) {
   /* Cubierta a dos aguas. Un prisma triangular: dos faldones con un cinco por
      ciento de pendiente y un caballete. Es lo que quita de encima la sensación
      de maqueta que deja un techo plano. */
-  const cubierta = new THREE.Shape();
-  cubierta.moveTo(-FONDO / 2, 0);
-  cubierta.lineTo(0, 3.2);
-  cubierta.lineTo(FONDO / 2, 0);
-  cubierta.closePath();
-  const geoCubierta = new THREE.ExtrudeGeometry(cubierta, { depth: ANCHO, bevelEnabled: false });
-  geoCubierta.rotateY(Math.PI / 2);
-  geoCubierta.translate(-ANCHO / 2, 0, 0);
-  const tejado = new THREE.Mesh(geoCubierta, matNave);
-  tejado.position.set(xNave, ALTO, zFachada - FONDO / 2);
-  tejado.castShadow = true;
-  grupo.add(tejado);
-  aDesechar.push(geoCubierta);
+  /* DOS FALDONES, no un prisma extruido.
+     Era una `ExtrudeGeometry` de un triángulo, y ésas salen SIN coordenadas de
+     textura utilizables: el mapa de chapa de la nave se estiraba de cualquier
+     manera sobre los dos faldones y el tejado quedaba como una losa lisa de
+     color plano. Siete mil metros cuadrados de nada justo en lo que más se ve
+     desde una cámara aérea.
+     Dos cajas inclinadas tienen UV correctas, tiran la textura a su escala y,
+     de regalo, le dan CANTO al alero: un tejado con espesor proyecta una
+     sombra fina sobre la fachada, y esa línea es media lectura de volumen. */
+  const PENDIENTE = 3.2;
+  const faldon = Math.hypot(FONDO / 2, PENDIENTE);
+  const geoFaldon = new THREE.BoxGeometry(ANCHO, 0.45, faldon);
+  for (const s2 of [-1, 1]) {
+    const t = new THREE.Mesh(geoFaldon, matNave);
+    t.rotation.x = s2 * Math.atan2(PENDIENTE, FONDO / 2);
+    t.position.set(xNave, ALTO + PENDIENTE / 2, zFachada - FONDO / 2 + s2 * FONDO / 4);
+    t.castShadow = true;
+    t.receiveShadow = true;
+    grupo.add(t);
+  }
+  aDesechar.push(geoFaldon);
 
   /* ── La cubierta, que es lo que de verdad se ve ────────────────────
      La cámara de esta página es aérea: de una nave logística se ve el TEJADO
@@ -1453,24 +1461,64 @@ export function crearDestino() {
   nave.receiveShadow = true;
   grupo.add(nave);
 
-  const faldon = new THREE.Shape();
-  faldon.moveTo(-23, 0);
-  faldon.lineTo(0, 2.4);
-  faldon.lineTo(23, 0);
-  faldon.closePath();
-  const geoCubierta = new THREE.ExtrudeGeometry(faldon, { depth: 94, bevelEnabled: false });
-  geoCubierta.rotateY(Math.PI / 2);
-  geoCubierta.translate(-47, 0, 0);
-  const tejado = new THREE.Mesh(geoCubierta, matNave);
-  tejado.position.set(X - 4, 11.5, zFachada - 23);
-  tejado.castShadow = true;
-  grupo.add(tejado);
+  /* Dos faldones con UV correctas, como en el centro logístico: el prisma
+     extruido salía sin coordenadas de textura y el tejado quedaba liso. Y aquí
+     importa el doble, porque éste es el último plano del viaje. */
+  const PENDIENTE_D = 2.4;
+  const ladoFaldon = Math.hypot(23, PENDIENTE_D);
+  const geoFaldonD = new THREE.BoxGeometry(94, 0.4, ladoFaldon);
+  for (const s2 of [-1, 1]) {
+    const t = new THREE.Mesh(geoFaldonD, matNave);
+    t.rotation.x = s2 * Math.atan2(PENDIENTE_D, 23);
+    t.position.set(X - 4, 11.5 + PENDIENTE_D / 2, zFachada - 23 + s2 * 11.5);
+    t.castShadow = true;
+    t.receiveShadow = true;
+    grupo.add(t);
+  }
+  aDesechar.push(geoFaldonD);
+
+  /* Y la cubierta con lo que lleva una cubierta industrial: lucernarios de
+     alero a caballete, extractores en el caballete y máquinas de clima. La
+     cámara es aérea y de esta nave se ve sobre todo el tejado. */
+  const dummyD = new THREE.Object3D();
+  const matLucernarioD = luminoso(0xd8e6ef, 0.16);
+  const matMaquinaD = new THREE.MeshStandardMaterial({ color: 0x9aa1a8, roughness: 0.72, metalness: 0.35 });
+  aDesechar.push(matLucernarioD, matMaquinaD);
+  const BANDAS_D = 8;
+  const geoLucernarioD = new THREE.BoxGeometry(3.2, 0.3, 19);
+  const lucesTejado = new THREE.InstancedMesh(geoLucernarioD, matLucernarioD, BANDAS_D * 2);
+  let nLD = 0;
+  for (let i = 0; i < BANDAS_D; i++) {
+    const x = X - 4 - 47 + 94 * ((i + 0.5) / BANDAS_D);
+    for (const s2 of [-1, 1]) {
+      dummyD.rotation.set(s2 * Math.atan2(PENDIENTE_D, 23), 0, 0);
+      dummyD.position.set(x, 12.3, zFachada - 23 + s2 * 11.5);
+      dummyD.updateMatrix();
+      lucesTejado.setMatrixAt(nLD++, dummyD.matrix);
+    }
+  }
+  lucesTejado.frustumCulled = false;
+  grupo.add(lucesTejado);
+  aDesechar.push(geoLucernarioD);
+
+  const geoExtractorD = new THREE.CylinderGeometry(0.55, 0.55, 0.8, 8);
+  const extractoresD = new THREE.InstancedMesh(geoExtractorD, matMaquinaD, BANDAS_D + 1);
+  for (let i = 0; i <= BANDAS_D; i++) {
+    dummyD.rotation.set(0, 0, 0);
+    dummyD.position.set(X - 4 - 47 + (94 * i) / BANDAS_D, 14.3, zFachada - 23);
+    dummyD.updateMatrix();
+    extractoresD.setMatrixAt(i, dummyD.matrix);
+  }
+  extractoresD.castShadow = true;
+  extractoresD.frustumCulled = false;
+  grupo.add(extractoresD);
+  aDesechar.push(geoExtractorD);
 
   const geoFranja = new THREE.BoxGeometry(94.4, 1.2, 46.4);
   const franja = new THREE.Mesh(geoFranja, matNaranja);
   franja.position.set(X - 4, 10.2, zFachada - 23);
   grupo.add(franja);
-  aDesechar.push(geoNave, geoCubierta, geoFranja);
+  aDesechar.push(geoNave, geoFranja);
 
   /* ── Marquesina de recepción ───────────────────────────────────── */
   const geoMarquesina = new THREE.BoxGeometry(34, 0.7, 6.4);
