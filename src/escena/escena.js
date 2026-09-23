@@ -161,7 +161,13 @@ export function montarEscena({ contenedor, caps, reducido, alProgreso, alPintar 
     { obj: mar, desde: -1, hasta: finPuerto },
     { obj: puerto, desde: -1, hasta: finPuerto },
     { obj: aduanas, desde: inicioDe('grua') - 0.06, hasta: finPuerto },
-    { obj: carretera, desde: inicioDe('aduanas') - 0.04, hasta: 1.1 },
+    /* El campo se enciende DESDE EL PRINCIPIO. Ahora que el puerto acaba a
+       trescientos veinte metros del cantil, detrás de él tiene que haber
+       terreno: si el grupo de la carretera se encendiera al llegar a aduanas,
+       en los capítulos marítimos el puerto se acabaría en el vacío. Y da la
+       vuelta al corte que se quería arreglar: cuando el puerto se apaga, el
+       campo y la carretera llevaban ahí todo el viaje. */
+    { obj: carretera, desde: -1, hasta: 1.1 },
     { obj: centro, desde: inicioDe('carretera') - 0.02, hasta: 1.1 },
     { obj: destino, desde: inicioDe('centro') - 0.02, hasta: 1.1 },
   ];

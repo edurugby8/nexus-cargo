@@ -192,6 +192,16 @@ export function crearMar({ caps }) {
   const malla = new THREE.Mesh(geo, mat);
   malla.rotation.x = -Math.PI / 2;
   malla.position.y = 0;
+  /* EL MAR EMPIEZA EN EL MUELLE Y VA HACIA FUERA.
+     Estaba centrado en el origen, o sea que sus 3.600 metros se repartían la
+     mitad hacia el mar y la otra mitad TIERRA ADENTRO: mil ochocientos metros
+     de agua por debajo del puerto, de la carretera y del centro logístico. No
+     se veía porque la explanada del puerto, que llegaba igual de lejos, lo
+     tapaba entero; en cuanto el puerto deja de cubrir la salida, el agua
+     asoma por el hueco y la carretera aparece flotando sobre el mar.
+     La costa está en el canto del muelle. Seis metros por dentro para que el
+     agua se meta bajo el cantil y no quede junta, y el resto hacia fuera. */
+  malla.position.z = MEDIDAS.muelle - 6 + lado / 2;
   malla.renderOrder = -1;
   malla.frustumCulled = false;
 

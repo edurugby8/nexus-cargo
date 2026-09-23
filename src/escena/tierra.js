@@ -33,12 +33,33 @@ export function crearPuerto({ caps }) {
      garabato, no un pavimento—. Repitiendo en proporción al tamaño real, la
      losa vuelve a ser cuadrada y mide unos catorce metros, que es lo que mide
      un paño de solera de patio portuario. */
+  /* La tesela mide 26 metros en el mundo, y eso hay que sostenerlo pieza a
+     pieza. La repetición se fijaba una vez para una losa de 3.400 × 1.700, y
+     al partir la explanada en trozos de proporciones distintas —uno de
+     3.400 × 160, otro de 1.660 × 200— la misma textura se estiraba con ellos:
+     el hormigón salía RAYADO, con la losa de seis metros de fondo y ciento
+     treinta de ancho. Así que cada paño se lleva su propia copia del mapa con
+     la repetición que le toca por su tamaño; la copia comparte la imagen, o
+     sea que no cuesta memoria. */
   const mapaSuelo = texturaHormigon();
-  // Tesela de 26 m: cuantas menos repeticiones, menos se ve el patrón
   mapaSuelo.repeat.set(3400 / 26, 1700 / 26);
+  const relieveSuelo = relieveHormigon();
+  const suelosHechos = [];
+  const sueloDe = (anchoX, anchoZ) => {
+    const mapa = mapaSuelo.clone();
+    mapa.needsUpdate = true;
+    mapa.repeat.set(anchoX / 26, anchoZ / 26);
+    const mat = new THREE.MeshStandardMaterial({
+      map: mapa, roughness: 0.94, metalness: 0.04,
+      normalMap: relieveSuelo, normalScale: new THREE.Vector2(0.35, 0.35),
+    });
+    suelosHechos.push(mapa, mat);
+    aDesechar.push(mapa, mat);
+    return mat;
+  };
   const matSuelo = new THREE.MeshStandardMaterial({
     map: mapaSuelo, roughness: 0.94, metalness: 0.04,
-    normalMap: relieveHormigon(), normalScale: new THREE.Vector2(0.35, 0.35),
+    normalMap: relieveSuelo, normalScale: new THREE.Vector2(0.35, 0.35),
   });
   const matBorde = new THREE.MeshStandardMaterial({ color: 0x6f7378, roughness: 0.9 });
   const matEstructura = new THREE.MeshStandardMaterial({ color: 0x8d949c, roughness: 0.7, metalness: 0.4 });
@@ -54,14 +75,82 @@ export function crearPuerto({ caps }) {
      tierra firme en lugar de acabarse. El detalle —bloques, grúas, tractores—
      sigue donde estaba: lo que se amplía es el suelo, que cuesta dos
      triángulos. */
-  const geoSuelo = new THREE.PlaneGeometry(3400, 1700);
-  const suelo = new THREE.Mesh(geoSuelo, matSuelo);
-  suelo.rotation.x = -Math.PI / 2;
-  suelo.position.set(0, 0.6, MEDIDAS.muelle - 850);
-  suelo.receiveShadow = true;
-  suelo.userData.envolvente = true;
-  grupo.add(suelo);
-  aDesechar.push(geoSuelo);
+  /* PERO EL PUERTO TIENE QUE ACABARSE EN ALGÚN SITIO, y ahí estaba el corte
+     brusco entre el puerto y la carretera.
+     La explanada se extendía 1.660 metros tierra adentro, o sea POR ENCIMA de
+     toda la carretera: el asfalto está a 0,02 y esta losa a 0,60, así que
+     mientras el puerto estaba encendido la carretera quedaba enterrada debajo
+     y sólo aparecía en el fotograma en que el puerto se apaga. No era una
+     transición: era el suelo cambiando de golpe bajo las ruedas, cincuenta y
+     ocho centímetros más abajo y de hormigón a asfalto.
+
+     Un puerto de verdad tiene un límite, y ese límite es la puerta. Así que la
+     explanada se parte en tres: la losa de delante, que llega hasta la línea
+     de la puerta; dos paños laterales que siguen tierra adentro para que el
+     patio no se acabe en el aire por los costados; y entre ellos, LIBRE, el
+     pasillo por el que sale el camión. Por ese hueco sube la carretera hasta
+     el muelle, así que cuando el puerto se apaga ya no hay nada que quitar de
+     debajo del camión: lo que se apaga queda detrás y lejos. */
+  const PUERTA_Z = MEDIDAS.carretera.desde + 20;      // −120: la línea de salida
+  const RAMPA = 30;                                   // lo que tarda en bajar
+  const MEDIA_SALIDA = 60;                            // media anchura del hueco
+  /* Y el recinto TAMBIÉN se acaba por el fondo, a trescientos veinte metros
+     del cantil: lo justo para cubrir las cuatro filas de bloques con margen.
+     Los paños laterales llegaban a 1.660 —el mismo error que la losa entera,
+     en versión estrecha—: hormigón del puerto por debajo del campo durante
+     kilómetro y medio, con los árboles de la carretera creciendo encima. Un
+     puerto ocupa lo que ocupa; detrás hay campo. */
+  const FONDO_PUERTO = -320;
+
+  const frontal = new THREE.PlaneGeometry(3400, MEDIDAS.muelle - PUERTA_Z);
+  const losa = new THREE.Mesh(frontal, sueloDe(3400, MEDIDAS.muelle - PUERTA_Z));
+  losa.rotation.x = -Math.PI / 2;
+  losa.position.set(0, 0.6, (MEDIDAS.muelle + PUERTA_Z) / 2);
+  losa.receiveShadow = true;
+  losa.userData.envolvente = true;
+  grupo.add(losa);
+  aDesechar.push(frontal);
+
+  const fondoLado = PUERTA_Z - FONDO_PUERTO;
+  for (const s of [-1, 1]) {
+    const bordeDentro = CORREDOR.x + s * MEDIA_SALIDA;
+    const bordeFuera = s < 0 ? -1700 : 1700;
+    const ancho = Math.abs(bordeFuera - bordeDentro);
+    const geo = new THREE.PlaneGeometry(ancho, fondoLado);
+    const pano = new THREE.Mesh(geo, sueloDe(ancho, fondoLado));
+    pano.rotation.x = -Math.PI / 2;
+    pano.position.set((bordeDentro + bordeFuera) / 2, 0.6, (PUERTA_Z + FONDO_PUERTO) / 2);
+    pano.receiveShadow = true;
+    pano.userData.envolvente = true;
+    grupo.add(pano);
+    aDesechar.push(geo);
+
+    /* Y el canto de cada paño contra el hueco de salida: medio metro de
+       desnivel a lo largo de ciento treinta metros no se deja a cuchillo. */
+    const geoCanto = new THREE.PlaneGeometry(fondoLado, 2.4);
+    const canto = new THREE.Mesh(geoCanto, matBorde);
+    canto.rotation.set(-Math.PI / 2, 0, Math.PI / 2);
+    canto.rotation.x = -Math.PI / 2 + s * 0.5;
+    canto.position.set(bordeDentro + s * 0.6, 0.1, (PUERTA_Z + FONDO_PUERTO) / 2);
+    canto.scale.set(1, 1, 1);
+    canto.userData.envolvente = true;
+    grupo.add(canto);
+    aDesechar.push(geoCanto);
+  }
+
+  /* LA RAMPA DE SALIDA: el pavimento baja de la cota del muelle a la de la
+     carretera en treinta metros, que es lo que mide una rampa de verdad para
+     este desnivel. Son los mismos treinta metros que usa el guion para bajar
+     el camión, y no por casualidad: los dos leen la misma medida, así que el
+     vehículo y el suelo que pisa no pueden separarse. */
+  const geoRampa = new THREE.PlaneGeometry(MEDIA_SALIDA * 2, Math.hypot(RAMPA, 0.58));
+  const rampa = new THREE.Mesh(geoRampa, sueloDe(MEDIA_SALIDA * 2, RAMPA));
+  rampa.rotation.x = -Math.PI / 2 - Math.atan2(0.58, RAMPA);
+  rampa.position.set(CORREDOR.x, 0.31, PUERTA_Z - RAMPA / 2);
+  rampa.receiveShadow = true;
+  rampa.userData.envolvente = true;
+  grupo.add(rampa);
+  aDesechar.push(geoRampa);
 
   /* El cantil: el canto vertical contra el agua, con sus defensas.
      Medía 1.400 y la explanada mide 3.400, así que por fuera de esos 1.400 el
@@ -753,9 +842,13 @@ export function crearCarretera({ caps }) {
      logística: se ve a la primera y es de las cosas que hacen que una escena
      deje de creerse. */
   const bordeRecinto = MEDIDAS.centro + 165;
+  /* Y tampoco dentro del puerto. Los rodales se plantaban desde el arranque
+     del capítulo, que está a la altura de la barrera, así que caían sobre el
+     hormigón de la terminal. El campo empieza donde acaba el recinto. */
+  const bordePuerto = -340;
   while (plantados < ARBOLES) {
     // Un rodal: centro al azar y entre tres y nueve árboles alrededor
-    const zR = Math.max(desde - azar() * largo, bordeRecinto);
+    const zR = clamp(desde - azar() * largo, bordeRecinto, bordePuerto);
     const sR = azar() > 0.5 ? 1 : -1;
     const xR = X + sR * (16 + azar() * 46);
     const cuantosR = 3 + Math.floor(azar() * 7);
@@ -793,7 +886,7 @@ export function crearCarretera({ caps }) {
   aDesechar.push(geoMata);
   const matas = new THREE.InstancedMesh(geoMata, matVerde, cuantos * 2);
   for (let i = 0; i < cuantos * 2; i++) {
-    const z = Math.max(desde - azar() * largo, bordeRecinto);
+    const z = clamp(desde - azar() * largo, bordeRecinto, bordePuerto);
     const s = azar() > 0.5 ? 1 : -1;
     dummy.rotation.set(0, azar() * 3, 0);
     dummy.position.set(X + s * (11 + azar() * 54), -0.9 + azar() * 0.5, z);
